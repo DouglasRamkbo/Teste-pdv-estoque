@@ -7,36 +7,13 @@
     <meta name="theme-color" content="#111827">
     <title>Gestor 3.0 Elite - Conectado</title>
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Google Fonts: Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    
-    <!-- HTML2PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: {
-                        gray: { 750: '#2d3748', 850: '#1a202c', 900: '#111827', 950: '#0B0F19' },
-                        brand: { 400: '#4ade80', 500: '#22c55e', 600: '#16a34a', 700: '#15803d' }
-                    },
-                    animation: { 'fade-in': 'fadeIn 0.3s ease-out' },
-                    keyframes: { fadeIn: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } } }
-                }
-            }
-        }
-    </script>
+    <!-- Fontes e ícones locais (sem dependência de CDN externo) -->
+    <link rel="stylesheet" href="vendor/inter.css">
+    <link rel="stylesheet" href="vendor/tailwind.css">
+    <link rel="stylesheet" href="vendor/phosphor/bold/style.css">
+    <link rel="stylesheet" href="vendor/phosphor/fill/style.css">
+    <link rel="stylesheet" href="vendor/phosphor/regular/style.css">
+    <script src="vendor/html2pdf.bundle.min.js"></script>
 
     <style>
         body { background-color: #111827; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
