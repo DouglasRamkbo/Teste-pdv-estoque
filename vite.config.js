@@ -33,7 +33,7 @@ export default defineConfig({
             output: { manualChunks: undefined }
         }
     },
-    publicDir: false,
+    publicDir: 'public',
     assetsInclude: ['**/*.woff', '**/*.woff2', '**/*.ttf'],
     plugins: [copyVendor()]
 });

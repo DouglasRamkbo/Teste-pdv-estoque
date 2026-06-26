@@ -1,0 +1,107 @@
+import { describe, it, expect } from 'vitest';
+import { formatMoney, formatDate, escapeHtml, safeImgUrl, sanitizeProductName, debounce } from './utils.js';
+
+describe('formatMoney', () => {
+    it('formats positive BRL', () => {
+        const result = formatMoney(10.5);
+        expect(result).toMatch(/10[,.]50/);
+    });
+    it('handles zero', () => {
+        expect(formatMoney(0)).toMatch(/0[,.]00/);
+    });
+    it('handles negative', () => {
+        expect(formatMoney(-5)).toMatch(/-/);
+    });
+});
+
+describe('formatDate', () => {
+    it('returns — for null', () => expect(formatDate(null)).toBe('—'));
+    it('returns — for undefined', () => expect(formatDate(undefined)).toBe('—'));
+    it('returns — for invalid string', () => expect(formatDate('invalid')).toBe('—'));
+    it('formats valid ISO date', () => {
+        const result = formatDate('2024-01-15T10:00:00Z');
+        expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    });
+    it('includes time when requested', () => {
+        const result = formatDate('2024-01-15T10:30:00Z', true);
+        expect(result).toMatch(/\d{2}:\d{2}/);
+    });
+});
+
+describe('escapeHtml', () => {
+    it('escapes <', () => expect(escapeHtml('<b>')).toBe('&lt;b&gt;'));
+    it('escapes &', () => expect(escapeHtml('a & b')).toBe('a &amp; b'));
+    it('escapes "', () => expect(escapeHtml('"test"')).toBe('&quot;test&quot;'));
+    it("escapes '", () => expect(escapeHtml("it's")).toBe("it&#039;s"));
+    it('handles null', () => expect(escapeHtml(null)).toBe(''));
+    it('handles undefined', () => expect(escapeHtml(undefined)).toBe(''));
+    it('handles 0', () => expect(escapeHtml(0)).toBe('0'));
+});
+
+describe('safeImgUrl', () => {
+    it('allows https URLs', () => {
+        const url = 'https://example.com/img.jpg';
+        expect(safeImgUrl(url)).toBe(url);
+    });
+    it('allows http URLs', () => {
+        const url = 'http://example.com/img.jpg';
+        expect(safeImgUrl(url)).toBe(url);
+    });
+    it('allows data:image/ URLs', () => {
+        const url = 'data:image/png;base64,abc123';
+        expect(safeImgUrl(url)).toBe(url);
+    });
+    it('blocks javascript: URLs', () => expect(safeImgUrl('javascript:alert(1)')).toBe(''));
+    it('blocks data:text/ URLs', () => expect(safeImgUrl('data:text/html,<h1>xss</h1>')).toBe(''));
+    it('blocks bare paths', () => expect(safeImgUrl('/etc/passwd')).toBe(''));
+    it('returns empty for null', () => expect(safeImgUrl(null)).toBe(''));
+    it('returns empty for empty string', () => expect(safeImgUrl('')).toBe(''));
+});
+
+describe('sanitizeProductName', () => {
+    it('rejects names starting with =', () => {
+        expect(sanitizeProductName('=SUM(A1)')).toMatchObject({ ok: false });
+    });
+    it('rejects names starting with +', () => {
+        expect(sanitizeProductName('+1234')).toMatchObject({ ok: false });
+    });
+    it('rejects names starting with -', () => {
+        expect(sanitizeProductName('-DROP TABLE')).toMatchObject({ ok: false });
+    });
+    it('rejects names starting with @', () => {
+        expect(sanitizeProductName('@foo')).toMatchObject({ ok: false });
+    });
+    it('rejects names with <script', () => {
+        expect(sanitizeProductName('<script>alert(1)</script>')).toMatchObject({ ok: false });
+    });
+    it('rejects <SCRIPT case-insensitive', () => {
+        expect(sanitizeProductName('<SCRIPT>alert(1)</SCRIPT>')).toMatchObject({ ok: false });
+    });
+    it('accepts normal product name', () => {
+        expect(sanitizeProductName('Vinho Tinto Cabernet')).toEqual({ ok: true });
+    });
+    it('accepts name with numbers', () => {
+        expect(sanitizeProductName('Produto 123')).toEqual({ ok: true });
+    });
+    it('rejects empty string', () => {
+        expect(sanitizeProductName('')).toMatchObject({ ok: false });
+    });
+    it('rejects null', () => {
+        expect(sanitizeProductName(null)).toMatchObject({ ok: false });
+    });
+});
+
+describe('debounce', () => {
+    it('delays function call', () => new Promise(resolve => {
+        let count = 0;
+        const fn = debounce(() => count++, 50);
+        fn(); fn(); fn();
+        setTimeout(() => { expect(count).toBe(1); resolve(); }, 120);
+    }));
+    it('calls only once for rapid calls', () => new Promise(resolve => {
+        let lastArg = null;
+        const fn = debounce((x) => { lastArg = x; }, 50);
+        fn(1); fn(2); fn(3);
+        setTimeout(() => { expect(lastArg).toBe(3); resolve(); }, 120);
+    }));
+});

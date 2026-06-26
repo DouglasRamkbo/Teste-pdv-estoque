@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="Sistema de Gestão de Vendas e Estoque de Alta Performance">
     <meta name="theme-color" content="#111827">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; font-src 'self' data:; object-src 'none';">
+    <link rel="manifest" href="/manifest.json">
     <title>Gestor 3.0 Elite - Conectado</title>
-    
-    <!-- Fontes e ícones locais (sem dependência de CDN externo) -->
+
+    <!-- Assets locais (sem CDN externo) -->
     <link rel="stylesheet" href="vendor/inter.css">
     <link rel="stylesheet" href="vendor/tailwind.css">
     <link rel="stylesheet" href="vendor/phosphor/bold/style.css">
@@ -25,12 +27,12 @@
         .tab-inactive { color: #9ca3af; border-bottom: 2px solid transparent; }
         .tab-inactive:hover { color: #e5e7eb; background: rgba(255, 255, 255, 0.02); }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        
-        /* Loading Overlay */
         #app-loading { position: fixed; inset: 0; background: #111827; z-index: 100; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 1rem; transition: opacity 0.5s ease; pointer-events: none; opacity: 0; }
         #app-loading.active { opacity: 1; pointer-events: all; }
         .spinner { width: 40px; height: 40px; border: 4px solid rgba(34, 197, 94, 0.1); border-left-color: #22c55e; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .sort-indicator { font-size: 0.7em; opacity: 0.7; }
+        th button { width: 100%; text-align: inherit; }
     </style>
 </head>
 <body class="text-gray-100 h-screen flex flex-col overflow-hidden bg-gray-900 selection:bg-brand-500 selection:text-white">
@@ -66,15 +68,22 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-1">Forma de Pagamento</label>
                     <select id="edit-order-payment" class="w-full bg-gray-700 text-white rounded-lg border-gray-600 border p-2.5 focus:ring-brand-500 outline-none">
-                         <option value="Pix">Pix</option>
-                         <option value="Dinheiro">Dinheiro</option>
-                         <option value="Cartão Crédito">Cartão Crédito</option>
-                         <option value="Cartão Débito">Cartão Débito</option>
+                        <option value="Pix">Pix</option>
+                        <option value="Dinheiro">Dinheiro</option>
+                        <option value="Cartão Crédito">Cartão Crédito</option>
+                        <option value="Cartão Débito">Cartão Débito</option>
                     </select>
+                </div>
+                <!-- Edit History Log -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-1"><i class="ph-fill ph-clock-clockwise text-gray-500"></i> Histórico de Edições</label>
+                    <div id="edit-order-history" class="bg-gray-900 rounded-lg p-3 space-y-1 max-h-28 overflow-y-auto custom-scroll text-xs text-gray-400">
+                        <p class="text-xs text-gray-500 italic">Sem histórico de edições.</p>
+                    </div>
                 </div>
                 <div class="pt-4 flex gap-3">
                     <button type="button" onclick="App.orders.deleteCurrent()" class="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg border border-red-500/20 transition-all flex items-center gap-2 text-sm font-medium">
-                        <i class="ph-bold ph-trash"></i> Excluir Pedido
+                        <i class="ph-bold ph-trash"></i> Excluir
                     </button>
                     <button type="submit" class="flex-1 bg-brand-600 hover:bg-brand-500 text-white font-bold py-2 rounded-lg shadow-lg transition-all">
                         Salvar Alterações
@@ -99,7 +108,7 @@
                 <span id="header-date">Carregando...</span>
             </div>
         </div>
-        
+
         <!-- Navigation Tabs -->
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto border-t border-gray-700/50 pt-1 custom-scroll">
             <button onclick="App.router.navigate('pdv')" id="tab-pdv" class="tab-active flex-1 py-3 px-4 inline-flex justify-center items-center gap-2 text-sm transition-all rounded-t-lg whitespace-nowrap">
@@ -126,7 +135,7 @@
     <!-- Main Content Area -->
     <main class="flex-1 overflow-y-auto p-4 sm:p-6 custom-scroll relative bg-gray-900 w-full">
         <div class="max-w-7xl mx-auto pb-20 w-full">
-            
+
             <!-- Toast Notification -->
             <div id="toast" class="fixed top-24 right-5 bg-gray-800 border border-gray-600 text-white px-6 py-4 rounded-lg shadow-2xl transform transition-all duration-300 translate-x-full opacity-0 z-50 flex items-center gap-3 pointer-events-none">
                 <i id="toast-icon" class="ph-fill ph-check-circle text-brand-500 text-2xl"></i>
@@ -146,6 +155,14 @@
                                 <i class="ph-fill ph-plus-circle text-brand-500"></i> Nova Venda
                             </h2>
                             <div class="space-y-5">
+                                <!-- Product search filter -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-400 mb-1">Buscar Produto</label>
+                                    <div class="relative">
+                                        <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                        <input type="text" id="cart-search-product" placeholder="Filtrar produtos..." class="w-full pl-9 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none">
+                                    </div>
+                                </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-400 mb-1">Produto</label>
                                     <div class="relative">
@@ -190,16 +207,36 @@
 
                     <!-- Carrinho (Sticky) -->
                     <div class="w-full lg:w-2/5 flex flex-col h-full">
-                        <div class="bg-gray-950 border border-gray-800 rounded-xl shadow-xl flex flex-col h-[500px]">
+                        <div class="bg-gray-950 border border-gray-800 rounded-xl shadow-xl flex flex-col">
                             <div class="p-5 border-b border-gray-800 flex justify-between items-center bg-gray-900 rounded-t-xl">
                                 <h3 class="text-white font-semibold flex items-center gap-2">
                                     <i class="ph-fill ph-shopping-cart-simple text-brand-500"></i> Carrinho
                                 </h3>
                                 <span id="cart-count" class="bg-brand-500 text-gray-900 text-xs font-bold px-2.5 py-1 rounded-full">0</span>
                             </div>
-                            <div id="cart-items-container" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll bg-gray-900/50"></div>
+                            <div id="cart-items-container" class="overflow-y-auto p-4 space-y-3 custom-scroll bg-gray-900/50 min-h-[200px] max-h-[300px]"></div>
                             <div class="p-5 bg-gray-900 border-t border-gray-800 rounded-b-xl space-y-4 shadow-[0_-5px_15px_rgba(0,0,0,0.3)]">
-                                <div class="flex justify-between items-end">
+                                <!-- Discount -->
+                                <div class="flex items-center gap-2">
+                                    <label class="text-xs text-gray-400 whitespace-nowrap">Desconto:</label>
+                                    <input type="number" id="cart-discount-value" min="0" step="0.01" placeholder="0" class="w-24 bg-gray-800 text-white border border-gray-700 rounded-lg p-2 text-sm focus:ring-1 focus:ring-brand-500 outline-none">
+                                    <select id="cart-discount-type" class="bg-gray-800 text-white border border-gray-700 rounded-lg p-2 text-sm focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer">
+                                        <option value="%">%</option>
+                                        <option value="R$">R$</option>
+                                    </select>
+                                </div>
+                                <!-- Subtotal + Discount display -->
+                                <div class="space-y-1 text-sm">
+                                    <div class="flex justify-between text-gray-400">
+                                        <span>Subtotal</span>
+                                        <span id="cart-subtotal">R$ 0,00</span>
+                                    </div>
+                                    <div class="flex justify-between text-red-400">
+                                        <span>Desconto</span>
+                                        <span id="cart-discount-display">R$ 0,00</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-end border-t border-gray-800 pt-2">
                                     <span class="text-gray-400">Total</span>
                                     <span class="text-3xl font-bold text-brand-400" id="cart-total">R$ 0,00</span>
                                 </div>
@@ -212,6 +249,8 @@
                                         <option value="Cartão Crédito">Cartão Crédito</option>
                                         <option value="Cartão Débito">Cartão Débito</option>
                                     </select>
+                                    <!-- Notes -->
+                                    <textarea id="cart-notes" placeholder="Observações (Opcional)" rows="2" class="w-full bg-gray-800 text-white border border-gray-700 rounded-lg p-3 text-sm focus:ring-1 focus:ring-brand-500 outline-none resize-none"></textarea>
                                 </div>
                                 <button onclick="App.cart.finalize()" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3.5 rounded-lg shadow-lg shadow-brand-500/20 transition-all flex justify-center items-center gap-2 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" id="btn-finalize">
                                     <i class="ph-bold ph-check"></i> Finalizar Venda
@@ -228,7 +267,7 @@
                             <i class="ph-fill ph-cash-register text-brand-400"></i> Resumo do Dia
                         </h2>
                         <div class="flex items-center gap-2">
-                             <div class="flex items-center gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700 shadow-sm">
+                            <div class="flex items-center gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700 shadow-sm">
                                 <label class="text-sm text-gray-400 font-medium px-2">Data:</label>
                                 <input type="date" id="daily-date-filter" class="bg-gray-700 text-white border border-gray-600 rounded px-3 py-1.5 outline-none focus:border-brand-500 text-sm transition-colors">
                             </div>
@@ -307,24 +346,31 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
                     <div class="bg-gray-800 rounded-xl p-6 border border-gray-700 relative overflow-hidden flex flex-col justify-center">
                         <div class="absolute right-0 top-0 h-full w-1 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
                         <p class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">Patrimônio em Estoque</p>
-                        <h3 class="text-3xl font-bold text-white tracking-tight" id="dash-stock-value">R$ 0,00</h3>
+                        <h3 class="text-2xl font-bold text-white tracking-tight" id="dash-stock-value">R$ 0,00</h3>
                         <p class="text-xs text-gray-500 mt-2 flex items-center gap-1"><i class="ph-fill ph-info"></i> Valor de custo total</p>
                     </div>
                     <div class="bg-gray-800 rounded-xl p-6 border border-gray-700 relative overflow-hidden flex flex-col justify-center">
                         <div class="absolute right-0 top-0 h-full w-1 bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.5)]"></div>
                         <p class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">Vendas na Data</p>
-                        <h3 class="text-3xl font-bold text-white tracking-tight" id="dash-date-sales">R$ 0,00</h3>
+                        <h3 class="text-2xl font-bold text-white tracking-tight" id="dash-date-sales">R$ 0,00</h3>
                         <p class="text-xs text-green-400 mt-2" id="dash-date-sales-count">0 pedidos realizados</p>
                     </div>
                     <div class="bg-gray-800 rounded-xl p-6 border border-gray-700 relative overflow-hidden flex flex-col justify-center">
                         <div class="absolute right-0 top-0 h-full w-1 bg-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
-                        <p class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">Lucro Líquido na Data</p>
-                        <h3 class="text-3xl font-bold text-white tracking-tight" id="dash-date-profit">R$ 0,00</h3>
+                        <p class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">Lucro Líquido</p>
+                        <h3 class="text-2xl font-bold text-white tracking-tight" id="dash-date-profit">R$ 0,00</h3>
                         <p class="text-xs text-purple-400 mt-2">Margem real sobre vendas</p>
+                    </div>
+                    <!-- Ticket Médio -->
+                    <div class="bg-gray-800 rounded-xl p-6 border border-gray-700 relative overflow-hidden flex flex-col justify-center">
+                        <div class="absolute right-0 top-0 h-full w-1 bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]"></div>
+                        <p class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">Ticket Médio</p>
+                        <h3 class="text-2xl font-bold text-white tracking-tight" id="dash-avg-ticket">R$ 0,00</h3>
+                        <p class="text-xs text-yellow-400 mt-2">Média por venda</p>
                     </div>
                 </div>
 
@@ -347,29 +393,45 @@
             <!-- VIEW: HISTÓRICO -->
             <div id="view-historico" class="hidden space-y-6 animate-fade-in">
                 <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <h3 class="font-semibold text-gray-200">Histórico de Pedidos</h3>
-                        <div class="flex gap-2 w-full sm:w-auto">
-                            <div class="relative flex-1 sm:w-64">
-                                <i class="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                                <input type="text" id="search-orders" onkeyup="App.orders.render()" placeholder="Buscar cliente..." class="w-full pl-9 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none">
+                    <div class="px-6 py-4 border-b border-gray-700 flex flex-col gap-3">
+                        <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+                            <h3 class="font-semibold text-gray-200">Histórico de Pedidos</h3>
+                            <div class="flex gap-2 w-full sm:w-auto">
+                                <div class="relative flex-1 sm:w-56">
+                                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                    <input type="text" id="search-orders" placeholder="Buscar cliente..." class="w-full pl-9 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none">
+                                </div>
+                                <button onclick="App.orders.exportPDF()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 p-2 rounded-lg border border-red-500/20 transition-colors" title="Exportar PDF">
+                                    <i class="ph-bold ph-file-pdf"></i>
+                                </button>
+                                <button onclick="App.orders.exportCSV()" class="bg-gray-700 hover:bg-brand-600 text-white p-2 rounded-lg border border-gray-600 transition-colors" title="Exportar CSV">
+                                    <i class="ph-bold ph-download-simple"></i>
+                                </button>
                             </div>
-                            <button onclick="App.orders.exportPDF()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 p-2 rounded-lg border border-red-500/20 transition-colors" title="Exportar PDF">
-                                <i class="ph-bold ph-file-pdf"></i>
-                            </button>
-                            <button onclick="App.orders.exportCSV()" class="bg-gray-700 hover:bg-brand-600 text-white p-2 rounded-lg border border-gray-600 transition-colors" title="Exportar CSV">
-                                <i class="ph-bold ph-download-simple"></i>
-                            </button>
+                        </div>
+                        <!-- Date range filter -->
+                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                            <label class="text-gray-400">De:</label>
+                            <input type="date" id="historico-date-from" class="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 outline-none focus:border-brand-500 text-sm">
+                            <label class="text-gray-400">Até:</label>
+                            <input type="date" id="historico-date-to" class="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 outline-none focus:border-brand-500 text-sm">
+                            <button onclick="document.getElementById('historico-date-from').value=''; document.getElementById('historico-date-to').value=''; App.orders.render();" class="text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded bg-gray-700 hover:bg-gray-600">Limpar</button>
                         </div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
                             <thead class="bg-gray-750 text-gray-400 font-medium border-b border-gray-700 uppercase text-xs">
                                 <tr>
-                                    <th class="px-6 py-4">Data</th>
-                                    <th class="px-6 py-4">Cliente</th>
+                                    <th class="px-6 py-4">
+                                        <button class="ord-sort-btn flex items-center gap-1 hover:text-white transition-colors" data-col="date" onclick="App.orders.sortBy('date')">Data<span class="sort-indicator"> ▼</span></button>
+                                    </th>
+                                    <th class="px-6 py-4">
+                                        <button class="ord-sort-btn flex items-center gap-1 hover:text-white transition-colors" data-col="customer" onclick="App.orders.sortBy('customer')">Cliente<span class="sort-indicator"></span></button>
+                                    </th>
                                     <th class="px-6 py-4 text-center">Pagamento</th>
-                                    <th class="px-6 py-4 text-right">Total</th>
+                                    <th class="px-6 py-4 text-right">
+                                        <button class="ord-sort-btn flex items-center gap-1 hover:text-white transition-colors ml-auto" data-col="total" onclick="App.orders.sortBy('total')">Total<span class="sort-indicator"></span></button>
+                                    </th>
                                     <th class="px-6 py-4 text-center">Ações</th>
                                 </tr>
                             </thead>
@@ -391,7 +453,11 @@
                             <label class="block text-sm font-medium text-gray-400 mb-1">Nome do Produto</label>
                             <input type="text" id="prod-name" placeholder="Ex: Vinho Catena Zapata" class="w-full bg-gray-700 text-white rounded-lg border-gray-600 border p-2 focus:ring-brand-500 outline-none transition-colors" required>
                         </div>
-                        <div class="lg:col-span-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400 mb-1">Categoria</label>
+                            <input type="text" id="prod-category" placeholder="Ex: Vinhos" class="w-full bg-gray-700 text-white rounded-lg border-gray-600 border p-2 focus:ring-brand-500 outline-none transition-colors">
+                        </div>
+                        <div>
                             <label class="block text-sm font-medium text-gray-400 mb-1">Link da Foto (URL)</label>
                             <input type="url" id="prod-img" placeholder="https://..." class="w-full bg-gray-700 text-white rounded-lg border-gray-600 border p-2 focus:ring-brand-500 outline-none transition-colors">
                         </div>
@@ -420,11 +486,15 @@
                 <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
                     <div class="px-6 py-4 border-b border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
                         <h3 class="font-semibold text-gray-200">Inventário</h3>
-                        <div class="flex gap-2 w-full sm:w-auto">
-                            <div class="relative flex-1 sm:w-64">
+                        <div class="flex gap-2 w-full sm:w-auto flex-wrap">
+                            <div class="relative flex-1 sm:w-48">
                                 <i class="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                                <input type="text" id="search-inventory" onkeyup="App.inventory.render()" placeholder="Filtrar (ex: vinho)..." class="w-full pl-9 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none">
+                                <input type="text" id="search-inventory" placeholder="Filtrar (ex: vinho)..." class="w-full pl-9 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none">
                             </div>
+                            <!-- Category filter -->
+                            <select id="inventory-category-filter" class="bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer">
+                                <option value="">Todas categorias</option>
+                            </select>
                             <button onclick="App.inventory.exportPDF()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 p-2 rounded-lg border border-red-500/20 transition-colors" title="Exportar Estoque em PDF">
                                 <i class="ph-bold ph-file-pdf"></i>
                             </button>
@@ -435,10 +505,19 @@
                             <thead class="bg-gray-750 text-gray-400 font-medium border-b border-gray-700 uppercase text-xs">
                                 <tr>
                                     <th class="px-6 py-3 w-16">Foto</th>
-                                    <th class="px-6 py-3">Produto</th>
-                                    <th class="px-6 py-3 text-center">Estoque</th>
-                                    <th class="px-6 py-3 text-right">Custo</th>
-                                    <th class="px-6 py-3 text-right">Venda</th>
+                                    <th class="px-6 py-3">
+                                        <button class="inv-sort-btn flex items-center gap-1 hover:text-white transition-colors" data-col="name" onclick="App.inventory.sortBy('name')">Produto<span class="sort-indicator"> ▲</span></button>
+                                    </th>
+                                    <th class="px-6 py-3 text-center">Categoria</th>
+                                    <th class="px-6 py-3 text-center">
+                                        <button class="inv-sort-btn flex items-center gap-1 hover:text-white transition-colors mx-auto" data-col="qty" onclick="App.inventory.sortBy('qty')">Estoque<span class="sort-indicator"></span></button>
+                                    </th>
+                                    <th class="px-6 py-3 text-right">
+                                        <button class="inv-sort-btn flex items-center gap-1 hover:text-white transition-colors ml-auto" data-col="cost" onclick="App.inventory.sortBy('cost')">Custo<span class="sort-indicator"></span></button>
+                                    </th>
+                                    <th class="px-6 py-3 text-right">
+                                        <button class="inv-sort-btn flex items-center gap-1 hover:text-white transition-colors ml-auto" data-col="price" onclick="App.inventory.sortBy('price')">Venda<span class="sort-indicator"></span></button>
+                                    </th>
                                     <th class="px-6 py-3 text-center">Ações</th>
                                 </tr>
                             </thead>
@@ -470,6 +549,25 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Period Reports -->
+                <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6">
+                    <h2 class="text-lg font-semibold text-white mb-4 border-b border-gray-700 pb-2 flex items-center gap-2">
+                        <i class="ph-fill ph-chart-bar text-blue-400"></i> Relatório por Período
+                    </h2>
+                    <div class="flex gap-3 mb-6">
+                        <button onclick="App.reports.renderPeriod('week')" class="px-4 py-2 bg-gray-700 hover:bg-brand-600 text-white rounded-lg border border-gray-600 text-sm transition-colors flex items-center gap-2">
+                            <i class="ph-bold ph-calendar-week"></i> Esta Semana
+                        </button>
+                        <button onclick="App.reports.renderPeriod('month')" class="px-4 py-2 bg-gray-700 hover:bg-brand-600 text-white rounded-lg border border-gray-600 text-sm transition-colors flex items-center gap-2">
+                            <i class="ph-bold ph-calendar-month"></i> Este Mês
+                        </button>
+                    </div>
+                    <div id="period-report-container">
+                        <p class="text-gray-500 text-sm">Selecione um período acima.</p>
+                    </div>
+                </div>
+
                 <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6">
                     <h2 class="text-lg font-semibold text-white mb-6 border-b border-gray-700 pb-2 flex items-center gap-2">
                         <i class="ph-fill ph-user-focus text-purple-500"></i> Dossiê do Cliente
@@ -534,58 +632,74 @@
                     <h2 class="text-lg font-semibold text-white mb-6 border-b border-gray-700 pb-2 flex items-center gap-2">
                         <i class="ph-fill ph-gear text-brand-500"></i> Personalização e Dados
                     </h2>
-                    
-                    <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600 mb-8">
+
+                    <!-- Company Identity -->
+                    <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600 mb-6">
                         <h3 class="font-bold text-white mb-4 flex items-center gap-2">
                             <i class="ph-bold ph-storefront text-brand-400"></i> Identidade da Empresa
                         </h3>
-                        <div class="flex gap-4">
-                            <div class="flex-1">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
                                 <label class="block text-sm font-medium text-gray-400 mb-1">Nome da Empresa</label>
                                 <input type="text" id="config-company-name" placeholder="Ex: Brava Conveniência" class="w-full bg-gray-800 text-white rounded-lg border-gray-600 border p-3 focus:ring-brand-500 outline-none transition-shadow">
-                                <p class="text-xs text-gray-500 mt-1">Este nome aparecerá no topo do site, nos relatórios PDF e planilhas.</p>
+                                <p class="text-xs text-gray-500 mt-1">Aparece no topo, nos PDFs e planilhas.</p>
                             </div>
-                            <div class="flex items-end">
-                                <button onclick="App.config.saveSettings()" class="bg-brand-600 hover:bg-brand-500 text-white font-medium py-3 px-6 rounded-lg transition-colors shadow-md h-[48px] flex items-center gap-2">
-                                    <i class="ph-bold ph-floppy-disk"></i> Salvar Nome
-                                </button>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1">Alerta Estoque Baixo (unidades)</label>
+                                <input type="number" id="config-low-stock" min="1" value="5" class="w-full bg-gray-800 text-white rounded-lg border-gray-600 border p-3 focus:ring-brand-500 outline-none transition-shadow">
+                                <p class="text-xs text-gray-500 mt-1">Produto fica vermelho quando abaixo deste valor.</p>
                             </div>
+                        </div>
+                        <div class="mt-4">
+                            <button onclick="App.config.saveSettings()" class="bg-brand-600 hover:bg-brand-500 text-white font-medium py-3 px-6 rounded-lg transition-colors shadow-md flex items-center gap-2">
+                                <i class="ph-bold ph-floppy-disk"></i> Salvar Configurações
+                            </button>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-gray-700 pt-8">
-                        <div class="space-y-4">
-                            <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600">
-                                <h3 class="font-bold text-white mb-2 flex items-center gap-2">
-                                    <i class="ph-bold ph-download-simple text-brand-400"></i> Exportar Backup
-                                </h3>
-                                <p class="text-sm text-gray-400 mb-4">Baixe um arquivo JSON com todos os dados.</p>
-                                <button onclick="App.backup.export()" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-medium py-2 px-4 rounded-lg transition-colors">Baixar Arquivo</button>
-                            </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-gray-700 pt-6">
+                        <!-- Export Backup -->
+                        <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600">
+                            <h3 class="font-bold text-white mb-2 flex items-center gap-2">
+                                <i class="ph-bold ph-download-simple text-brand-400"></i> Exportar Backup
+                            </h3>
+                            <p class="text-sm text-gray-400 mb-4">Baixe um arquivo JSON com todos os dados.</p>
+                            <button onclick="App.backup.export()" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-medium py-2 px-4 rounded-lg transition-colors">Baixar JSON</button>
                         </div>
-                        <div class="space-y-4">
-                            <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600">
-                                <h3 class="font-bold text-white mb-2 flex items-center gap-2">
-                                    <i class="ph-bold ph-upload-simple text-blue-400"></i> Importar Backup
-                                </h3>
-                                <p class="text-sm text-gray-400 mb-4">Restaure seus dados de um arquivo anterior.</p>
-                                <input type="file" id="backup-file-input" accept=".json" class="hidden" onchange="App.backup.import(this)">
-                                <button onclick="document.getElementById('backup-file-input').click()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded-lg transition-colors">Selecionar Arquivo</button>
-                            </div>
+                        <!-- Import Backup -->
+                        <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600">
+                            <h3 class="font-bold text-white mb-2 flex items-center gap-2">
+                                <i class="ph-bold ph-upload-simple text-blue-400"></i> Importar Backup
+                            </h3>
+                            <p class="text-sm text-gray-400 mb-4">Restaure seus dados de um arquivo anterior.</p>
+                            <input type="file" id="backup-file-input" accept=".json" class="hidden" onchange="App.backup.import(this)">
+                            <button onclick="document.getElementById('backup-file-input').click()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded-lg transition-colors">Selecionar JSON</button>
                         </div>
-                    </div>
-                    <div class="mt-10 pt-6 border-t border-gray-700">
-                        <h3 class="text-red-500 font-bold mb-4 flex items-center gap-2">
-                            <i class="ph-fill ph-warning"></i> Zona de Perigo
-                        </h3>
-                        <button onclick="App.backup.clearAll()" class="text-red-400 hover:text-red-300 text-sm underline transition-colors">Apagar todos os dados e resetar fábrica</button>
+                        <!-- CSV Import -->
+                        <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600">
+                            <h3 class="font-bold text-white mb-2 flex items-center gap-2">
+                                <i class="ph-bold ph-file-csv text-green-400"></i> Importar Produtos (CSV)
+                            </h3>
+                            <p class="text-sm text-gray-400 mb-2">Formato: <code class="text-xs bg-gray-700 px-1 rounded">nome,quantidade,custo,preco</code></p>
+                            <p class="text-xs text-gray-500 mb-4">Produtos existentes serão atualizados. Novos serão adicionados.</p>
+                            <input type="file" id="csv-file-input" accept=".csv" class="hidden" onchange="App.backup.importCSV(this)">
+                            <button onclick="document.getElementById('csv-file-input').click()" class="w-full bg-green-600 hover:bg-green-500 text-white font-medium py-2 px-4 rounded-lg transition-colors">Selecionar CSV</button>
+                        </div>
+                        <!-- Danger Zone -->
+                        <div class="bg-red-500/5 p-4 rounded-lg border border-red-500/20">
+                            <h3 class="text-red-400 font-bold mb-2 flex items-center gap-2">
+                                <i class="ph-fill ph-warning"></i> Zona de Perigo
+                            </h3>
+                            <p class="text-sm text-gray-400 mb-4">Apaga todos os dados locais e na nuvem. Irreversível.</p>
+                            <button onclick="App.backup.clearAll()" class="text-red-400 hover:text-red-300 text-sm underline transition-colors">Apagar todos os dados e resetar fábrica</button>
+                        </div>
                     </div>
                 </div>
             </div>
+
         </div>
     </main>
 
-    <!-- Scripts (ES6 Modules) -->
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
