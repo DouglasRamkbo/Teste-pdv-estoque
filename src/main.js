@@ -53,6 +53,7 @@ const App = {
         onAuthStateChanged(auth, async (user) => {
             clearTimeout(safetyTimeout);
             if (user) {
+                this.isOffline = false; // limpa flag caso timeout tenha disparado antes
                 this.currentUser = user;
                 this.ui.updateConnectionStatus(true);
                 await this.storage.load();
@@ -79,6 +80,7 @@ const App = {
     },
 
     enableOfflineMode() {
+        if (this.isOffline) return;
         this.isOffline = true;
         this.ui.updateConnectionStatus(false, true);
         this.storage.loadLocalBackup();
@@ -492,7 +494,10 @@ const App = {
 
             const orders = App.data.orders.filter(o => o.customer === name);
             const totalSpent = orders.reduce((acc, o) => acc + o.total, 0);
-            const firstDate = new Date(Math.min(...orders.map(o => new Date(o.date))));
+            const firstDate = new Date(orders.reduce((min, o) => {
+                const t = new Date(o.date).getTime();
+                return t < min ? t : min;
+            }, Infinity));
 
             resultArea.classList.remove('hidden');
             emptyArea.classList.add('hidden');
@@ -542,8 +547,8 @@ const App = {
             if(!tbody) return;
 
             const filtered = App.data.orders.filter(o =>
-                o.customer.toLowerCase().includes(term) ||
-                o.id.toString().includes(term)
+                (o.customer ?? '').toLowerCase().includes(term) ||
+                String(o.id ?? '').includes(term)
             );
 
             if(filtered.length === 0) {
@@ -642,9 +647,11 @@ const App = {
             if (!App.data.currentModalOrder) return;
 
             const id = document.getElementById('edit-order-id').value;
-            const customer = document.getElementById('edit-order-customer').value;
+            const customer = document.getElementById('edit-order-customer').value.trim();
             const dateStr = document.getElementById('edit-order-date').value;
             const payment = document.getElementById('edit-order-payment').value;
+
+            if (!customer) return App.ui.toast("Nome do cliente obrigatório.", true);
 
             const orderIndex = App.data.orders.findIndex(o => String(o.id) === String(id));
             if (orderIndex === -1) return;
@@ -759,6 +766,11 @@ const App = {
                     if(!Array.isArray(json.products) || !Array.isArray(json.orders)) {
                         return App.ui.toast("Arquivo inválido.", true);
                     }
+                    const validProduct = p => p && typeof p.name === 'string' && typeof p.price === 'number' && typeof p.qty === 'number';
+                    const validOrder = o => o && typeof o.customer === 'string' && typeof o.total === 'number' && Array.isArray(o.items);
+                    if (!json.products.every(validProduct) || !json.orders.every(validOrder)) {
+                        return App.ui.toast("Arquivo corrompido ou incompatível.", true);
+                    }
                     App.data.products = json.products;
                     App.data.orders = json.orders.map(o => ({...o, status: o.status || 'concluida'}));
                     App.data.config = (json.config && typeof json.config.companyName === 'string')
@@ -802,14 +814,15 @@ const App = {
             filtered.forEach(p => {
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-gray-700/30 transition-colors border-b border-gray-700 group';
-                const imgTag = p.img ? `<img src="${p.img}" class="w-10 h-10 object-cover rounded bg-white" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0YjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ij48L2NpcmNsZT48cG9seWxpbmUgcG9pbnRzPSIyMSAxNSAxNiAxMCA1IDIxIj48L3BvbHlsaW5lPjwvc3ZnPg=='">` : `<div class="w-10 h-10 bg-gray-700 rounded flex items-center justify-center"><i class="ph ph-image text-gray-500"></i></div>`;
+                const safeImg = App.utils.safeImgUrl(p.img);
+                const imgTag = safeImg ? `<img src="${App.utils.escapeHtml(safeImg)}" class="w-10 h-10 object-cover rounded bg-white" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0YjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ij48L2NpcmNsZT48cG9seWxpbmUgcG9pbnRzPSIyMSAxNSAxNiAxMCA1IDIxIj48L3BvbHlsaW5lPjwvc3ZnPg=='">` : `<div class="w-10 h-10 bg-gray-700 rounded flex items-center justify-center"><i class="ph ph-image text-gray-500"></i></div>`;
                 tr.innerHTML = `<td class="px-6 py-4">${imgTag}</td><td class="px-6 py-4 font-medium text-gray-200">${App.utils.escapeHtml(p.name)}</td><td class="px-6 py-4 text-center"><span class="${p.qty < 5 ? 'text-red-400 font-bold bg-red-400/10 px-2 py-1 rounded' : 'text-green-400 font-bold bg-green-400/10 px-2 py-1 rounded'}">${p.qty}</span></td><td class="px-6 py-4 text-right text-gray-500">${App.utils.formatMoney(p.cost)}</td><td class="px-6 py-4 text-right text-gray-200">${App.utils.formatMoney(p.price)}</td><td class="px-6 py-4 text-center"><div class="flex items-center justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity"><button onclick="App.inventory.edit('${p.id}')" class="text-blue-400 hover:text-white p-2 rounded hover:bg-blue-600 transition-colors" title="Editar"><i class="ph-bold ph-pencil-simple"></i></button><button onclick="App.inventory.delete('${p.id}')" class="text-red-400 hover:text-white p-2 rounded hover:bg-red-600 transition-colors" title="Excluir"><i class="ph-bold ph-trash"></i></button></div></td>`;
                 tbody.appendChild(tr);
             });
         },
         exportPDF() {
-            const term = document.getElementById('search-inventory').value.toLowerCase();
-            const filtered = App.data.products.filter(p => p.name.toLowerCase().includes(term));
+            const term = (document.getElementById('search-inventory')?.value ?? '').toLowerCase();
+            const filtered = App.data.products.filter(p => (p.name ?? '').toLowerCase().includes(term));
 
             if(filtered.length === 0) return App.ui.toast("Nada para exportar", true);
 
@@ -929,7 +942,7 @@ const App = {
                 document.getElementById('preview-name').textContent = p.name;
                 document.getElementById('preview-stock-badge').textContent = `Estoque: ${p.qty}`;
                 document.getElementById('preview-price').textContent = App.utils.formatMoney(p.price);
-                document.getElementById('preview-img').src = p.img || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0YjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ij48L2NpcmNsZT48cG9seWxpbmUgcG9pbnRzPSIyMSAxNSAxNiAxMCA1IDIxIj48L3BvbHlsaW5lPjwvc3ZnPg==';
+                document.getElementById('preview-img').src = App.utils.safeImgUrl(p.img) || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0YjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ij48L2NpcmNsZT48cG9seWxpbmUgcG9pbnRzPSIyMSAxNSAxNiAxMCA1IDIxIj48L3BvbHlsaW5lPjwvc3ZnPg==';
             }
         },
         adjustQty(delta) {
@@ -979,8 +992,9 @@ const App = {
                     total += item.total;
                     const div = document.createElement('div');
                     div.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex items-center gap-3 relative group animate-fade-in';
-                    const imgSrc = item.img || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0YjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ij48L2NpcmNsZT48cG9seWxpbmUgcG9pbnRzPSIyMSAxNSAxNiAxMCA1IDIxIj48L3BvbHlsaW5lPjwvc3ZnPg==';
-                    div.innerHTML = `<img src="${imgSrc}" class="w-10 h-10 rounded object-cover border border-gray-600"><div class="flex-1 min-w-0"><p class="text-white text-sm font-medium truncate">${item.name}</p><p class="text-gray-400 text-xs">${item.qty}x ${App.utils.formatMoney(item.price)}</p></div><div class="font-bold text-brand-400 text-sm">${App.utils.formatMoney(item.total)}</div><button onclick="App.cart.remove(${index})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md opacity-0 group-hover:opacity-100 transition-all hover:scale-110"><i class="ph-bold ph-x"></i></button>`;
+                    const fallbackImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0YjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ij48L2NpcmNsZT48cG9seWxpbmUgcG9pbnRzPSIyMSAxNSAxNiAxMCA1IDIxIj48L3BvbHlsaW5lPjwvc3ZnPg==';
+                    const imgSrc = App.utils.escapeHtml(App.utils.safeImgUrl(item.img) || fallbackImg);
+                    div.innerHTML = `<img src="${imgSrc}" class="w-10 h-10 rounded object-cover border border-gray-600"><div class="flex-1 min-w-0"><p class="text-white text-sm font-medium truncate">${App.utils.escapeHtml(item.name)}</p><p class="text-gray-400 text-xs">${item.qty}x ${App.utils.formatMoney(item.price)}</p></div><div class="font-bold text-brand-400 text-sm">${App.utils.formatMoney(item.total)}</div><button onclick="App.cart.remove(${index})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md opacity-0 group-hover:opacity-100 transition-all hover:scale-110"><i class="ph-bold ph-x"></i></button>`;
                     container.appendChild(div);
                 });
             }
@@ -1007,7 +1021,8 @@ const App = {
                 if(prod) prod.qty -= item.qty;
             });
 
-            App.data.orders.unshift({ id: Date.now(), date: new Date().toISOString(), customer, payment, items: [...App.data.cart], total: orderTotal, profit: orderProfit, status: 'concluida' });
+            const orderId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+            App.data.orders.unshift({ id: orderId, date: new Date().toISOString(), customer, payment, items: [...App.data.cart], total: orderTotal, profit: orderProfit, status: 'concluida' });
             App.data.cart = [];
             App.storage.save();
             this.render();
@@ -1071,11 +1086,17 @@ const App = {
     utils: {
         formatMoney(val) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val); },
         formatDate(isoStr, includeTime = false) {
+            const d = new Date(isoStr);
+            if (isNaN(d)) return '—';
             const opts = { day: '2-digit', month: '2-digit', year: 'numeric' };
             if(includeTime) { opts.hour = '2-digit'; opts.minute = '2-digit'; }
-            return new Date(isoStr).toLocaleDateString('pt-BR', opts);
+            return d.toLocaleDateString('pt-BR', opts);
         },
-        escapeHtml(unsafe) { return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+        escapeHtml(unsafe) { return String(unsafe ?? '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); },
+        safeImgUrl(url) {
+            if (!url) return '';
+            return /^(https?:\/\/|data:image\/)/.test(url) ? url : '';
+        }
     }
 };
 
