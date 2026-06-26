@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatMoney, formatDate, escapeHtml, safeImgUrl, sanitizeProductName, debounce } from './utils.js';
+import { formatMoney, formatDate, escapeHtml, safeImgUrl, sanitizeProductName, debounce, genId, parseCSVLine } from './utils.js';
 import { computeCaixaExpected } from './modules/caixa.js';
 
 describe('formatMoney', () => {
@@ -44,9 +44,8 @@ describe('safeImgUrl', () => {
         const url = 'https://example.com/img.jpg';
         expect(safeImgUrl(url)).toBe(url);
     });
-    it('allows http URLs', () => {
-        const url = 'http://example.com/img.jpg';
-        expect(safeImgUrl(url)).toBe(url);
+    it('blocks http URLs (mixed content)', () => {
+        expect(safeImgUrl('http://example.com/img.jpg')).toBe('');
     });
     it('allows data:image/ URLs', () => {
         const url = 'data:image/png;base64,abc123';
@@ -153,4 +152,48 @@ describe('debounce', () => {
         fn(1); fn(2); fn(3);
         setTimeout(() => { expect(lastArg).toBe(3); resolve(); }, 120);
     }));
+    it('flush runs the pending call synchronously', () => {
+        let called = 0;
+        const fn = debounce(() => called++, 1000);
+        fn(); fn();
+        fn.flush();
+        expect(called).toBe(1);
+    });
+    it('flush is a no-op when nothing is pending', () => {
+        let called = 0;
+        const fn = debounce(() => called++, 50);
+        fn.flush();
+        expect(called).toBe(0);
+    });
+});
+
+describe('genId', () => {
+    it('returns a non-empty string', () => {
+        const id = genId();
+        expect(typeof id).toBe('string');
+        expect(id.length).toBeGreaterThan(0);
+    });
+    it('produces unique values across calls', () => {
+        const ids = new Set();
+        for (let i = 0; i < 50; i++) ids.add(genId());
+        expect(ids.size).toBe(50);
+    });
+});
+
+describe('parseCSVLine', () => {
+    it('splits simple comma-separated values', () => {
+        expect(parseCSVLine('a,b,c')).toEqual(['a', 'b', 'c']);
+    });
+    it('preserves commas inside quoted fields', () => {
+        expect(parseCSVLine('"Silva, João",10,5.5')).toEqual(['Silva, João', '10', '5.5']);
+    });
+    it('handles escaped quotes ("")', () => {
+        expect(parseCSVLine('"He said ""hi""",2')).toEqual(['He said "hi"', '2']);
+    });
+    it('trims surrounding whitespace', () => {
+        expect(parseCSVLine(' a , b ')).toEqual(['a', 'b']);
+    });
+    it('returns single field for line without separators', () => {
+        expect(parseCSVLine('hello')).toEqual(['hello']);
+    });
 });

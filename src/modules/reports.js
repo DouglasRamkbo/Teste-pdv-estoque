@@ -151,11 +151,13 @@ export function createReports(App) {
         populateCustomerSelect() {
             const select = document.getElementById('report-customer-select');
             if (!select) return;
+            const previous = select.value;
             const customers = [...new Set(App.data.orders.map(o => o.customer).filter(c => c && c !== 'Consumidor Final'))].sort();
             select.innerHTML = '<option value="">Selecione...</option>';
             customers.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c; opt.text = c;
+                if (c === previous) opt.selected = true;
                 select.appendChild(opt);
             });
         },

@@ -7,10 +7,50 @@
 
 export function debounce(fn, delay) {
     let timer;
-    return function (...args) {
+    let lastArgs = null;
+    let lastThis = null;
+    const debounced = function (...args) {
+        lastArgs = args;
+        lastThis = this;
         clearTimeout(timer);
-        timer = setTimeout(() => fn.apply(this, args), delay);
+        timer = setTimeout(() => {
+            timer = null;
+            fn.apply(lastThis, lastArgs);
+        }, delay);
     };
+    debounced.flush = function () {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+            fn.apply(lastThis, lastArgs);
+        }
+    };
+    return debounced;
+}
+
+export function genId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+export function parseCSVLine(line) {
+    const out = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { cur += ch; }
+        } else {
+            if (ch === '"') inQuotes = true;
+            else if (ch === ',') { out.push(cur); cur = ''; }
+            else { cur += ch; }
+        }
+    }
+    out.push(cur);
+    return out.map(c => c.trim());
 }
 
 export function formatMoney(val) {
@@ -37,7 +77,7 @@ export function escapeHtml(unsafe) {
 
 export function safeImgUrl(url) {
     if (!url) return '';
-    return /^(https?:\/\/|data:image\/)/.test(url) ? url : '';
+    return /^(https:\/\/|data:image\/)/.test(url) ? url : '';
 }
 
 export function sanitizeProductName(name) {

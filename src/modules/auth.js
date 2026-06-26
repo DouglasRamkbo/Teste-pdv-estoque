@@ -63,6 +63,7 @@ export function createAuth(App, auth) {
 
         async logout() {
             if (!confirm('Deseja sair da conta?')) return;
+            if (App.storage.flushPendingSave) App.storage.flushPendingSave();
             if (App.storage._unsubscribe) { App.storage._unsubscribe(); App.storage._unsubscribe = null; }
             App.data.products = []; App.data.orders = []; App.data.cart = [];
             App.currentUser = null;
@@ -72,6 +73,7 @@ export function createAuth(App, auth) {
         },
 
         continueOffline() {
+            if (App.storage._unsubscribe) { App.storage._unsubscribe(); App.storage._unsubscribe = null; }
             this.hideLoginScreen();
             App.enableOfflineMode();
         },

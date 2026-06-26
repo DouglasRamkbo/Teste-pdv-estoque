@@ -63,27 +63,30 @@ npm test          # roda os 35 testes unitários
 
 ### Configuração do Firebase
 
-O projeto vem com um Firebase de exemplo embutido em `src/main.js`. Para usar o seu próprio:
+O projeto vem com um Firebase de exemplo embutido em `src/main.js` como fallback. Para usar o seu próprio (recomendado):
 
 1. Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com)
 2. Ative **Authentication** (Email/Password e Google)
 3. Ative **Firestore Database** em modo de produção
-4. Substitua o objeto `firebaseConfig` em `src/main.js` pelas suas credenciais
+4. Copie `.env.example` para `.env` e preencha com suas credenciais — o Vite as injeta em build/dev automaticamente
 
 #### Regras de segurança do Firestore
 
-Para o modo multi-usuário funcionar, configure as regras:
+> **Aviso:** a regra abaixo (`allow read, write: if request.auth != null;`) deixa qualquer usuário autenticado ler/escrever qualquer loja se conhecer o `storeId` (UID do dono). Use apenas em ambientes de teste. Para produção, restrinja por owner/membership:
 
 ```js
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Estrito: apenas o dono da loja (storeId == uid) pode ler/escrever.
     match /artifacts/{appId}/stores/{storeId}/data/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.uid == storeId;
     }
   }
 }
 ```
+
+Para suporte multi-usuário (compartilhar `storeId`), mantenha uma subcoleção `members/{uid}` na loja e use `exists(/.../stores/$(storeId)/members/$(request.auth.uid))` na regra.
 
 ## Estrutura do projeto
 
@@ -129,7 +132,7 @@ vendor/                  # assets locais (fontes, ícones, CSS)
 
 ## Testes
 
-35 testes unitários cobrindo utils, storage, cart, inventory, orders e cálculos financeiros.
+Testes unitários cobrindo utils (formatação, sanitização, CSV, debounce, IDs), cálculo de saldo de caixa e helpers críticos.
 
 ```bash
 npm test

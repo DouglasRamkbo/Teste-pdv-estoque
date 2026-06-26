@@ -137,9 +137,7 @@ export function createCart(App) {
             const orderTotal = orderSubtotal - discount;
             orderProfit -= discount;
 
-            const orderId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-                ? crypto.randomUUID()
-                : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+            const orderId = App.utils.genId();
 
             App.data.orders.unshift({
                 id: orderId, date: new Date().toISOString(), customer, payment,

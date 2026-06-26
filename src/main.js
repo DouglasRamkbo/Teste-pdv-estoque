@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-import { debounce, formatMoney, formatDate, escapeHtml, safeImgUrl } from './utils.js';
+import { debounce, formatMoney, formatDate, escapeHtml, safeImgUrl, genId } from './utils.js';
 import { createStorage } from './storage.js';
 import { createUi } from './modules/ui.js';
 import { createRouter } from './modules/router.js';
@@ -20,13 +20,14 @@ let firebaseConfig;
 if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
 } else {
+    const env = import.meta.env || {};
     firebaseConfig = {
-        apiKey: "AIzaSyDAipnkQ0hEuyBTXxhDItFSZuHUn1TQqwg",
-        authDomain: "lk-assistencia.firebaseapp.com",
-        projectId: "lk-assistencia",
-        storageBucket: "lk-assistencia.firebasestorage.app",
-        messagingSenderId: "1047697682416",
-        appId: "1:1047697682416:web:37234abd5b616063693735"
+        apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyDAipnkQ0hEuyBTXxhDItFSZuHUn1TQqwg",
+        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "lk-assistencia.firebaseapp.com",
+        projectId: env.VITE_FIREBASE_PROJECT_ID || "lk-assistencia",
+        storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "lk-assistencia.firebasestorage.app",
+        messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1047697682416",
+        appId: env.VITE_FIREBASE_APP_ID || "1:1047697682416:web:37234abd5b616063693735"
     };
 }
 
@@ -157,12 +158,16 @@ const App = {
     },
 
     renderAll() {
-        try { if (this.inventory) this.inventory.render(); } catch (e) { console.error('inventory:', e); }
-        try { if (this.reports) { this.reports.renderDaily(); this.reports.renderGeneral(); } } catch (e) { console.error('reports:', e); }
-        try { if (this.dashboard) this.dashboard.render(); } catch (e) { console.error('dashboard:', e); }
-        try { if (this.orders) this.orders.render(); } catch (e) { console.error('orders:', e); }
-        try { if (this.cart) { this.cart.render(); this.cart.populateSelect(); } } catch (e) { console.error('cart:', e); }
-        try { if (this.caixa) this.caixa.render(); } catch (e) { console.error('caixa:', e); }
+        const safe = (name, fn) => {
+            try { fn(); }
+            catch (e) { console.error(`[renderAll] ${name} failed:`, e?.stack || e); }
+        };
+        if (this.inventory) safe('inventory.render', () => this.inventory.render());
+        if (this.reports) safe('reports.render', () => { this.reports.renderDaily(); this.reports.renderGeneral(); });
+        if (this.dashboard) safe('dashboard.render', () => this.dashboard.render());
+        if (this.orders) safe('orders.render', () => this.orders.render());
+        if (this.cart) safe('cart.render', () => { this.cart.render(); this.cart.populateSelect(); });
+        if (this.caixa) safe('caixa.render', () => this.caixa.render());
     },
 
     config: {
@@ -189,7 +194,7 @@ const App = {
         }
     },
 
-    utils: { formatMoney, formatDate, escapeHtml, safeImgUrl }
+    utils: { formatMoney, formatDate, escapeHtml, safeImgUrl, genId }
 };
 
 // Attach factory modules

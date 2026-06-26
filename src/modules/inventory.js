@@ -193,8 +193,7 @@ export function createInventory(App) {
                 const idx = App.data.products.findIndex(p => String(p.id) === String(App.data.editingId));
                 if (idx !== -1) App.data.products[idx] = { ...App.data.products[idx], name: rawName, img, qty, cost, price, category };
             } else {
-                const id = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
-                App.data.products.push({ id, name: rawName, qty, cost, price, img, category });
+                App.data.products.push({ id: App.utils.genId(), name: rawName, qty, cost, price, img, category });
             }
 
             this.cancelEdit();

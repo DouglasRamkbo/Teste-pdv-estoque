@@ -1,3 +1,5 @@
+import { parseCSVLine } from '../utils.js';
+
 export function createBackup(App) {
     return {
         export() {
@@ -22,9 +24,11 @@ export function createBackup(App) {
                     if (!json.products.every(validProduct) || !json.orders.every(validOrder)) return App.ui.toast('Arquivo corrompido ou incompatível.', true);
                     App.data.products = json.products;
                     App.data.orders = json.orders.map(o => ({ ...o, status: o.status || 'concluida' }));
-                    App.data.config = (json.config && typeof json.config.companyName === 'string')
-                        ? { lowStockThreshold: 5, ...json.config }
-                        : { companyName: "Foz Import's", lowStockThreshold: 5 };
+                    const importedConfig = json.config && typeof json.config === 'object' ? json.config : {};
+                    App.data.config = {
+                        companyName: typeof importedConfig.companyName === 'string' ? importedConfig.companyName : "Foz Import's",
+                        lowStockThreshold: Number.isFinite(importedConfig.lowStockThreshold) ? importedConfig.lowStockThreshold : 5
+                    };
                     App.storage.save();
                     App.renderAll();
                     App.ui.toast('Backup restaurado com sucesso!');
@@ -44,13 +48,13 @@ export function createBackup(App) {
                     const lines = e.target.result.split(/\r?\n/).filter(l => l.trim());
                     if (lines.length < 2) return App.ui.toast('CSV vazio ou sem dados.', true);
 
-                    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+                    const header = parseCSVLine(lines[0]).map(h => h.toLowerCase());
                     const [iName, iQty, iCost, iPrice] = ['nome', 'quantidade', 'custo', 'preco'].map(k => header.indexOf(k));
                     if ([iName, iQty, iCost, iPrice].includes(-1)) return App.ui.toast('CSV precisa de colunas: nome,quantidade,custo,preco', true);
 
                     let imported = 0, skipped = 0;
                     for (let i = 1; i < lines.length; i++) {
-                        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+                        const cols = parseCSVLine(lines[i]);
                         const name = cols[iName] ?? '';
                         const qty = parseInt(cols[iQty]);
                         const cost = parseFloat(cols[iCost]);
@@ -60,8 +64,7 @@ export function createBackup(App) {
                         const existing = App.data.products.find(p => p.name.toLowerCase() === name.toLowerCase());
                         if (existing) { existing.qty = qty; existing.cost = cost; existing.price = price; }
                         else {
-                            const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + i).toString(36);
-                            App.data.products.push({ id, name, qty, cost, price, img: '', category: '' });
+                            App.data.products.push({ id: App.utils.genId(), name, qty, cost, price, img: '', category: '' });
                         }
                         imported++;
                     }
@@ -78,6 +81,7 @@ export function createBackup(App) {
                 if (confirm('Tem certeza absoluta? Essa ação é irreversível.')) {
                     App.data.products = []; App.data.orders = []; App.data.cart = [];
                     App.storage.save();
+                    if (App.storage.flushPendingSave) App.storage.flushPendingSave();
                     location.reload();
                 }
             }
