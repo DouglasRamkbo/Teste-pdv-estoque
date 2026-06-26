@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 import { debounce, formatMoney, formatDate, escapeHtml, safeImgUrl } from './utils.js';
@@ -12,6 +12,9 @@ import { createOrders } from './modules/orders.js';
 import { createInventory } from './modules/inventory.js';
 import { createCart } from './modules/cart.js';
 import { createBackup } from './modules/backup.js';
+import { createAuth } from './modules/auth.js';
+import { createCaixa } from './modules/caixa.js';
+import { createShortcuts } from './modules/shortcuts.js';
 
 let firebaseConfig;
 if (typeof __firebase_config !== 'undefined') {
@@ -23,8 +26,7 @@ if (typeof __firebase_config !== 'undefined') {
         projectId: "lk-assistencia",
         storageBucket: "lk-assistencia.firebasestorage.app",
         messagingSenderId: "1047697682416",
-        appId: "1:1047697682416:web:37234abd5b616063693735",
-        measurementId: "G-NW9E1BSYF9"
+        appId: "1:1047697682416:web:37234abd5b616063693735"
     };
 }
 
@@ -33,7 +35,6 @@ const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 
 const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'foz-imports-default';
-const INITIAL_AUTH_TOKEN = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 const App = {
     data: {
@@ -42,7 +43,8 @@ const App = {
         cart: [],
         editingId: null,
         currentModalOrder: null,
-        config: { companyName: "Foz Import's", lowStockThreshold: 5 }
+        config: { companyName: "Foz Import's", lowStockThreshold: 5 },
+        caixa: null
     },
 
     isOffline: false,
@@ -52,12 +54,16 @@ const App = {
         const loader = document.getElementById('app-loading');
         if (loader) loader.classList.add('active');
 
+        this.ui.initTheme();
+
+        // Safety timeout for auth
         const safetyTimeout = setTimeout(() => {
             if (document.getElementById('app-loading')?.classList.contains('active')) {
-                console.warn('Timeout de Conexão. Ativando Modo Offline.');
-                this.enableOfflineMode();
+                console.warn('Auth timeout. Showing login screen.');
+                this.removeLoadingScreen();
+                this.auth.showLoginScreen();
             }
-        }, 3000);
+        }, 5000);
 
         let coreSetup = false;
         onAuthStateChanged(auth, async (user) => {
@@ -66,27 +72,21 @@ const App = {
                 this.isOffline = false;
                 this.currentUser = user;
                 this.ui.updateConnectionStatus(true);
+                this.ui.updateUserDisplay(user);
+                // Set up store ID for this user (defaults to their own UID)
+                this.storage.setupStoreId(user.uid);
+                this.auth.hideLoginScreen();
                 this.storage.load();
             } else {
                 this.currentUser = null;
                 this.ui.updateConnectionStatus(false);
-                this.storage.loadLocalBackup();
+                this.ui.updateUserDisplay(null);
+                this.removeLoadingScreen();
+                this.auth.showLoginScreen();
             }
             if (!coreSetup) { coreSetup = true; this.setupCore(); }
-            this.removeLoadingScreen();
+            if (user) this.removeLoadingScreen();
         });
-
-        try {
-            if (INITIAL_AUTH_TOKEN) {
-                await signInWithCustomToken(auth, INITIAL_AUTH_TOKEN);
-            } else {
-                await signInAnonymously(auth);
-            }
-        } catch (error) {
-            clearTimeout(safetyTimeout);
-            console.error('Erro Fatal Firebase:', error);
-            this.enableOfflineMode();
-        }
     },
 
     enableOfflineMode() {
@@ -110,11 +110,11 @@ const App = {
         this.ui.updateHeaderDate();
         this.ui.updateBranding();
         this.router.init();
+        this.shortcuts.init();
         this.renderAll();
 
         const today = new Date().toISOString().split('T')[0];
 
-        // Debounced search inputs (replaces onkeyup in HTML)
         const invSearch = document.getElementById('search-inventory');
         if (invSearch) invSearch.addEventListener('input', debounce(() => this.inventory.render(), 250));
 
@@ -124,47 +124,45 @@ const App = {
         const cartSearch = document.getElementById('cart-search-product');
         if (cartSearch) cartSearch.addEventListener('input', debounce(() => this.cart.populateSelect(), 250));
 
-        // Date filters
         const dailyFilter = document.getElementById('daily-date-filter');
         if (dailyFilter) { dailyFilter.value = today; dailyFilter.addEventListener('change', () => this.reports.renderDaily()); }
 
         const dashFilter = document.getElementById('dashboard-date-filter');
         if (dashFilter) { dashFilter.value = today; dashFilter.addEventListener('change', () => this.dashboard.render()); }
 
-        // Historico date range
         const hFrom = document.getElementById('historico-date-from');
-        if (hFrom) hFrom.addEventListener('change', () => this.orders.render());
+        if (hFrom) hFrom.addEventListener('change', () => { this.orders._page = 0; this.orders.render(); });
         const hTo = document.getElementById('historico-date-to');
-        if (hTo) hTo.addEventListener('change', () => this.orders.render());
+        if (hTo) hTo.addEventListener('change', () => { this.orders._page = 0; this.orders.render(); });
 
-        // Inventory category filter
         const catFilter = document.getElementById('inventory-category-filter');
-        if (catFilter) catFilter.addEventListener('change', () => this.inventory.render());
+        if (catFilter) catFilter.addEventListener('change', () => { this.inventory._page = 0; this.inventory.render(); });
 
-        // Discount live update
         const discVal = document.getElementById('cart-discount-value');
         if (discVal) discVal.addEventListener('input', debounce(() => this.cart.render(), 250));
         const discType = document.getElementById('cart-discount-type');
         if (discType) discType.addEventListener('change', () => this.cart.render());
 
-        // Config inputs
         const configInput = document.getElementById('config-company-name');
         if (configInput) configInput.value = this.data.config.companyName;
         const lowStockInput = document.getElementById('config-low-stock');
         if (lowStockInput) lowStockInput.value = this.data.config.lowStockThreshold ?? 5;
 
-        // PWA service worker
+        const storeCodeEl = document.getElementById('config-store-code-text');
+        if (storeCodeEl) storeCodeEl.textContent = this.storage.getStoreCode() ?? '—';
+
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW registration failed:', e));
         }
     },
 
     renderAll() {
-        try { if (this.inventory) this.inventory.render(); } catch (e) { console.error('inventory render error:', e); }
-        try { if (this.reports) { this.reports.renderDaily(); this.reports.renderGeneral(); } } catch (e) { console.error('reports render error:', e); }
-        try { if (this.dashboard) this.dashboard.render(); } catch (e) { console.error('dashboard render error:', e); }
-        try { if (this.orders) this.orders.render(); } catch (e) { console.error('orders render error:', e); }
-        try { if (this.cart) { this.cart.render(); this.cart.populateSelect(); } } catch (e) { console.error('cart render error:', e); }
+        try { if (this.inventory) this.inventory.render(); } catch (e) { console.error('inventory:', e); }
+        try { if (this.reports) { this.reports.renderDaily(); this.reports.renderGeneral(); } } catch (e) { console.error('reports:', e); }
+        try { if (this.dashboard) this.dashboard.render(); } catch (e) { console.error('dashboard:', e); }
+        try { if (this.orders) this.orders.render(); } catch (e) { console.error('orders:', e); }
+        try { if (this.cart) { this.cart.render(); this.cart.populateSelect(); } } catch (e) { console.error('cart:', e); }
+        try { if (this.caixa) this.caixa.render(); } catch (e) { console.error('caixa:', e); }
     },
 
     config: {
@@ -177,6 +175,17 @@ const App = {
             App.storage.save();
             App.ui.updateBranding();
             App.ui.toast('Configurações salvas!');
+        },
+
+        copyStoreCode() {
+            const code = App.storage.getStoreCode();
+            navigator.clipboard?.writeText(code).then(() => App.ui.toast('Código copiado!')).catch(() => App.ui.toast('Código: ' + code));
+        },
+
+        joinStore() {
+            const input = document.getElementById('config-store-join-code');
+            if (!input) return;
+            App.storage.joinStore(input.value.trim());
         }
     },
 
@@ -193,6 +202,9 @@ App.orders = createOrders(App);
 App.inventory = createInventory(App);
 App.cart = createCart(App);
 App.backup = createBackup(App);
+App.auth = createAuth(App, auth);
+App.caixa = createCaixa(App);
+App.shortcuts = createShortcuts(App);
 
 window.App = App;
 App.init();

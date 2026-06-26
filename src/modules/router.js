@@ -20,6 +20,7 @@ export function createRouter(App) {
             if (viewId === 'pdv') {
                 if (App.cart) App.cart.populateSelect();
                 if (App.reports) App.reports.renderDaily();
+                if (App.caixa) App.caixa.render();
             }
             if (viewId === 'dashboard') {
                 if (App.dashboard) App.dashboard.render();
