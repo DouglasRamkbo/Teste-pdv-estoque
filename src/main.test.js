@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatMoney, formatDate, escapeHtml, safeImgUrl, sanitizeProductName, debounce } from './utils.js';
+import { computeCaixaExpected } from './modules/caixa.js';
 
 describe('formatMoney', () => {
     it('formats positive BRL', () => {
@@ -88,6 +89,54 @@ describe('sanitizeProductName', () => {
     });
     it('rejects null', () => {
         expect(sanitizeProductName(null)).toMatchObject({ ok: false });
+    });
+});
+
+describe('computeCaixaExpected', () => {
+    const openedAt = '2024-01-15T08:00:00Z';
+    const baseState = { status: 'aberto', openedAt, openingBalance: 100, transactions: [] };
+
+    it('returns 0 when caixa is closed', () => {
+        expect(computeCaixaExpected({ ...baseState, status: 'fechado' }, [])).toBe(0);
+    });
+
+    it('returns opening balance with no movements', () => {
+        expect(computeCaixaExpected(baseState, [])).toBe(100);
+    });
+
+    it('sums cash orders since opening', () => {
+        const orders = [
+            { date: '2024-01-15T09:00:00Z', payment: 'Dinheiro', total: 50 },
+            { date: '2024-01-15T10:00:00Z', payment: 'Pix', total: 200 },
+            { date: '2024-01-15T11:00:00Z', payment: 'Dinheiro', total: 30 },
+        ];
+        expect(computeCaixaExpected(baseState, orders)).toBe(180);
+    });
+
+    it('ignores orders before opening time', () => {
+        const orders = [
+            { date: '2024-01-15T07:00:00Z', payment: 'Dinheiro', total: 999 },
+            { date: '2024-01-15T09:00:00Z', payment: 'Dinheiro', total: 25 },
+        ];
+        expect(computeCaixaExpected(baseState, orders)).toBe(125);
+    });
+
+    it('adds suprimentos and subtracts sangrias', () => {
+        const state = {
+            ...baseState,
+            transactions: [
+                { type: 'suprimento', amount: 50 },
+                { type: 'sangria', amount: 20 },
+            ]
+        };
+        expect(computeCaixaExpected(state, [])).toBe(130);
+    });
+
+    // Regression: previous handleClose re-parsed formatMoney output and lost
+    // the thousands separator for values >= R$ 1.000.
+    it('handles values >= 1000 without losing precision (regression)', () => {
+        const orders = [{ date: '2024-01-15T09:00:00Z', payment: 'Dinheiro', total: 1234.56 }];
+        expect(computeCaixaExpected(baseState, orders)).toBeCloseTo(1334.56, 2);
     });
 });
 

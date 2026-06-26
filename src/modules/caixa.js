@@ -1,3 +1,18 @@
+export function computeCaixaExpected(state, orders) {
+    if (!state || state.status !== 'aberto') return 0;
+    const openedDate = new Date(state.openedAt);
+    const cashIn = (orders || [])
+        .filter(o => new Date(o.date) >= openedDate && o.payment === 'Dinheiro')
+        .reduce((s, o) => s + o.total, 0);
+    const suprimentos = (state.transactions || [])
+        .filter(t => t.type === 'suprimento')
+        .reduce((s, t) => s + t.amount, 0);
+    const sangrias = (state.transactions || [])
+        .filter(t => t.type === 'sangria')
+        .reduce((s, t) => s + t.amount, 0);
+    return (state.openingBalance || 0) + cashIn + suprimentos - sangrias;
+}
+
 export function createCaixa(App) {
     function getState() {
         if (!App.data.caixa) {
@@ -38,9 +53,8 @@ export function createCaixa(App) {
             const openedDate = new Date(state.openedAt);
             const dayOrders = App.data.orders.filter(o => new Date(o.date) >= openedDate);
             const cashIn = dayOrders.filter(o => o.payment === 'Dinheiro').reduce((s, o) => s + o.total, 0);
-            const suprimentos = state.transactions.filter(t => t.type === 'suprimento').reduce((s, t) => s + t.amount, 0);
             const sangrias = state.transactions.filter(t => t.type === 'sangria').reduce((s, t) => s + t.amount, 0);
-            const expected = (state.openingBalance || 0) + cashIn + suprimentos - sangrias;
+            const expected = computeCaixaExpected(state, App.data.orders);
 
             const txHtml = state.transactions.length === 0
                 ? '<p class="text-gray-500 text-sm py-4 text-center">Nenhuma movimentação manual.</p>'
@@ -108,12 +122,7 @@ export function createCaixa(App) {
 
         closeCaixa() {
             if (getState().status !== 'aberto') return App.ui.toast('Caixa já está fechado.', true);
-            const state = getState();
-            const openedDate = new Date(state.openedAt);
-            const cashIn = App.data.orders.filter(o => new Date(o.date) >= openedDate && o.payment === 'Dinheiro').reduce((s, o) => s + o.total, 0);
-            const suprimentos = state.transactions.filter(t => t.type === 'suprimento').reduce((s, t) => s + t.amount, 0);
-            const sangrias = state.transactions.filter(t => t.type === 'sangria').reduce((s, t) => s + t.amount, 0);
-            const expected = (state.openingBalance || 0) + cashIn + suprimentos - sangrias;
+            const expected = computeCaixaExpected(getState(), App.data.orders);
             const expEl = document.getElementById('caixa-close-expected');
             if (expEl) expEl.textContent = App.utils.formatMoney(expected);
             const realEl = document.getElementById('caixa-close-real');
@@ -124,8 +133,7 @@ export function createCaixa(App) {
         handleClose(e) {
             e.preventDefault();
             const real = parseFloat(document.getElementById('caixa-close-real').value) || 0;
-            const expText = document.getElementById('caixa-close-expected')?.textContent ?? '0';
-            const expected = parseFloat(expText.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+            const expected = computeCaixaExpected(getState(), App.data.orders);
             const diff = real - expected;
             App.data.caixa = { ...getState(), status: 'fechado', closingBalance: real, closedAt: new Date().toISOString() };
             App.storage.save();
