@@ -19,11 +19,10 @@ export function debounce(fn, delay) {
         }, delay);
     };
     debounced.flush = function () {
-        if (timer) {
-            clearTimeout(timer);
-            timer = null;
-            fn.apply(lastThis, lastArgs);
-        }
+        if (!timer) return undefined;
+        clearTimeout(timer);
+        timer = null;
+        return fn.apply(lastThis, lastArgs);
     };
     return debounced;
 }

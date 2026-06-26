@@ -165,6 +165,12 @@ describe('debounce', () => {
         fn.flush();
         expect(called).toBe(0);
     });
+    it('flush returns the value of the wrapped function (awaitable)', async () => {
+        const fn = debounce(async (x) => x * 2, 1000);
+        fn(21);
+        const result = await fn.flush();
+        expect(result).toBe(42);
+    });
 });
 
 describe('genId', () => {

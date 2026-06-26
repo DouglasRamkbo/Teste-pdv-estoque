@@ -196,7 +196,18 @@ export function createStorage(App, db, APP_ID) {
         },
 
         flushPendingSave() {
-            if (_saveCloudDebounced && _saveCloudDebounced.flush) _saveCloudDebounced.flush();
+            if (_saveCloudDebounced && _saveCloudDebounced.flush) return _saveCloudDebounced.flush();
+            return undefined;
+        },
+
+        // Clear session-bound state. Call on logout / switching to offline,
+        // otherwise stale _lastSeenCloudUpdate from the previous user can
+        // trigger a false conflict on the next sign-in.
+        reset() {
+            _offlineEdits = false;
+            _localModifiedAt = null;
+            _lastSeenCloudUpdate = null;
+            _sizeWarned = false;
         },
 
         // Called after auth to set up store path

@@ -76,15 +76,15 @@ export function createBackup(App) {
             reader.readAsText(file);
         },
 
-        clearAll() {
-            if (confirm('ATENÇÃO: Isso apagará TODOS os dados locais e da nuvem. Continuar?')) {
-                if (confirm('Tem certeza absoluta? Essa ação é irreversível.')) {
-                    App.data.products = []; App.data.orders = []; App.data.cart = [];
-                    App.storage.save();
-                    if (App.storage.flushPendingSave) App.storage.flushPendingSave();
-                    location.reload();
-                }
+        async clearAll() {
+            if (!confirm('ATENÇÃO: Isso apagará TODOS os dados locais e da nuvem. Continuar?')) return;
+            if (!confirm('Tem certeza absoluta? Essa ação é irreversível.')) return;
+            App.data.products = []; App.data.orders = []; App.data.cart = [];
+            App.storage.save();
+            if (App.storage.flushPendingSave) {
+                try { await App.storage.flushPendingSave(); } catch (e) { console.warn('flush on clearAll:', e); }
             }
+            location.reload();
         }
     };
 }
