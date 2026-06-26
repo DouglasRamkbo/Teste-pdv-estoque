@@ -67,6 +67,7 @@ export function createStorage(App, db, APP_ID) {
                     App.data.config = d.config || { companyName: "Foz Import's", lowStockThreshold: 5 };
                     if (!App.data.config.lowStockThreshold) App.data.config.lowStockThreshold = 5;
                     if (d.caixa) App.data.caixa = d.caixa;
+                    App.data._members = Array.isArray(d.members) ? d.members : [];
 
                     localStorage.setItem('foz_products_v3', JSON.stringify(App.data.products));
                     localStorage.setItem('foz_orders_v3', JSON.stringify(App.data.orders));
@@ -92,29 +93,39 @@ export function createStorage(App, db, APP_ID) {
 
         _handleConflict(cloudData) {
             const conflictBar = document.getElementById('conflict-bar');
-            if (conflictBar) {
-                conflictBar.classList.remove('hidden');
-                document.getElementById('conflict-keep-local')?.addEventListener('click', () => {
-                    _offlineEdits = false;
-                    conflictBar.classList.add('hidden');
-                    this.save();
-                }, { once: true });
-                document.getElementById('conflict-use-cloud')?.addEventListener('click', () => {
-                    _offlineEdits = false;
-                    _localModifiedAt = null;
-                    conflictBar.classList.add('hidden');
-                    App.data.products = cloudData.products || [];
-                    App.data.orders = (cloudData.orders || []).map(o => ({ ...o, status: o.status || 'concluida' }));
-                    App.data.config = cloudData.config || App.data.config;
-                    if (cloudData.caixa) App.data.caixa = cloudData.caixa;
-                    App.renderAll();
-                    if (App.caixa) App.caixa.render();
-                }, { once: true });
-            } else {
-                // No conflict UI: default to keeping local changes
+            if (!conflictBar) {
                 _offlineEdits = false;
                 this.save();
+                return;
             }
+            conflictBar.classList.remove('hidden');
+
+            const replaceBtn = (id) => {
+                const old = document.getElementById(id);
+                if (!old) return null;
+                const fresh = old.cloneNode(true);
+                old.replaceWith(fresh);
+                return fresh;
+            };
+            const keepBtn = replaceBtn('conflict-keep-local');
+            const cloudBtn = replaceBtn('conflict-use-cloud');
+
+            keepBtn?.addEventListener('click', () => {
+                _offlineEdits = false;
+                conflictBar.classList.add('hidden');
+                this.save();
+            });
+            cloudBtn?.addEventListener('click', () => {
+                _offlineEdits = false;
+                _localModifiedAt = null;
+                conflictBar.classList.add('hidden');
+                App.data.products = cloudData.products || [];
+                App.data.orders = (cloudData.orders || []).map(o => ({ ...o, status: o.status || 'concluida' }));
+                App.data.config = cloudData.config || App.data.config;
+                if (cloudData.caixa) App.data.caixa = cloudData.caixa;
+                App.renderAll();
+                if (App.caixa) App.caixa.render();
+            });
         },
 
         loadLocalBackup() {
@@ -136,14 +147,35 @@ export function createStorage(App, db, APP_ID) {
             if (App.caixa) App.caixa.render();
         },
 
-        save() {
-            _localModifiedAt = new Date().toISOString();
-            if (App.isOffline) _offlineEdits = true;
-
+        _saveLocal() {
             localStorage.setItem('foz_products_v3', JSON.stringify(App.data.products));
             localStorage.setItem('foz_orders_v3', JSON.stringify(App.data.orders));
             localStorage.setItem('foz_config_v3', JSON.stringify(App.data.config));
             if (App.data.caixa) localStorage.setItem('foz_caixa_v1', JSON.stringify(App.data.caixa));
+            else localStorage.removeItem('foz_caixa_v1');
+        },
+
+        _buildDocPayload() {
+            const ownerUid = App.currentUser?.uid;
+            const existingMembers = Array.isArray(App.data._members) ? App.data._members : [];
+            const members = ownerUid && !existingMembers.includes(ownerUid)
+                ? [...existingMembers, ownerUid]
+                : existingMembers;
+            return {
+                products: App.data.products,
+                orders: App.data.orders,
+                config: App.data.config,
+                caixa: App.data.caixa || null,
+                members,
+                lastUpdate: new Date().toISOString()
+            };
+        },
+
+        save() {
+            _localModifiedAt = new Date().toISOString();
+            if (App.isOffline) _offlineEdits = true;
+
+            this._saveLocal();
 
             if (App.isOffline) return;
             if (!bumpWriteCounter()) return;
@@ -155,13 +187,7 @@ export function createStorage(App, db, APP_ID) {
                         const storeId = getStoreId();
                         if (user && storeId) {
                             const docRef = doc(db, 'artifacts', APP_ID, 'stores', storeId, 'data', 'store');
-                            await setDoc(docRef, {
-                                products: App.data.products,
-                                orders: App.data.orders,
-                                config: App.data.config,
-                                caixa: App.data.caixa || null,
-                                lastUpdate: new Date().toISOString()
-                            });
+                            await setDoc(docRef, this._buildDocPayload());
                         }
                     } catch (e) {
                         console.error('Cloud Save Error:', e);
@@ -170,6 +196,17 @@ export function createStorage(App, db, APP_ID) {
                 }, 1500);
             }
             _saveCloudDebounced();
+        },
+
+        async saveNow() {
+            _localModifiedAt = new Date().toISOString();
+            this._saveLocal();
+            if (App.isOffline) { _offlineEdits = true; return; }
+            const user = App.currentUser;
+            const storeId = getStoreId();
+            if (!user || !storeId) return;
+            const docRef = doc(db, 'artifacts', APP_ID, 'stores', storeId, 'data', 'store');
+            await setDoc(docRef, this._buildDocPayload());
         },
 
         // Called after auth to set up store path

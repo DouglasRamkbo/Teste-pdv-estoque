@@ -231,20 +231,24 @@ export function createInventory(App) {
             if (idx === -1) return;
             const deleted = App.data.products[idx];
 
-            // Cancel any pending undo
+            // If there's a previous pending deletion, commit it now before starting a new one
             if (this._undoBuffer) {
                 clearTimeout(this._undoBuffer.timer);
                 this._undoBuffer = null;
+                App.storage.save();
             }
 
             App.data.products.splice(idx, 1);
-            App.storage.save();
+            // Local-only render + persist; cloud sync deferred until undo window expires
             this.render();
+            App.storage._saveLocal?.();
 
-            // Show undo toast for 5 seconds
             this._undoBuffer = {
                 product: { ...deleted, _idx: idx },
-                timer: setTimeout(() => { this._undoBuffer = null; }, 5000)
+                timer: setTimeout(() => {
+                    this._undoBuffer = null;
+                    App.storage.save();
+                }, 5000)
             };
             App.ui.toastWithUndo(`"${deleted.name}" excluído.`, () => this._undoDelete());
         },
@@ -255,10 +259,9 @@ export function createInventory(App) {
             clearTimeout(timer);
             this._undoBuffer = null;
             const { _idx, ...p } = product;
-            // Re-insert at original position if possible
             const insertAt = Math.min(_idx, App.data.products.length);
             App.data.products.splice(insertAt, 0, p);
-            App.storage.save();
+            App.storage._saveLocal?.();
             this.render();
             App.ui.toast('Exclusão desfeita!');
         }
