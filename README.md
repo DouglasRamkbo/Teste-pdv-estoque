@@ -63,27 +63,41 @@ npm test          # roda os 35 testes unitários
 
 ### Configuração do Firebase
 
-O projeto vem com um Firebase de exemplo embutido em `src/main.js`. Para usar o seu próprio:
+O projeto vem com um Firebase de exemplo embutido em `src/main.js`. Para usar o seu próprio, **prefira variáveis de ambiente** (não comite as chaves):
 
 1. Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com)
 2. Ative **Authentication** (Email/Password e Google)
 3. Ative **Firestore Database** em modo de produção
-4. Substitua o objeto `firebaseConfig` em `src/main.js` pelas suas credenciais
+4. Copie `.env.example` para `.env` e preencha `VITE_FIREBASE_*`
+5. (Opcional) Habilite **App Check** + restrinja a apiKey por referer HTTP no console do Google Cloud — apiKeys de Firebase Web são públicas no bundle, mas só são realmente seguras com essas duas proteções
+
+> ⚠️ A apiKey de exemplo embutida em `src/main.js` está no histórico do git. Se você usá-la em produção, **rotacione-a** no console do Firebase e mude o projeto para o seu.
 
 #### Regras de segurança do Firestore
 
-Para o modo multi-usuário funcionar, configure as regras:
+A loja é compartilhada por uma lista de UIDs em `members[]` dentro do próprio doc. O dono cria a loja (storeId = uid dele) e adiciona outros UIDs em `members` para compartilhar:
 
 ```js
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /artifacts/{appId}/stores/{storeId}/data/{document=**} {
-      allow read, write: if request.auth != null;
+    match /artifacts/{appId}/stores/{storeId}/data/store {
+      // Leitura/escrita só se o usuário for membro OU o próprio dono (storeId == uid)
+      allow read, write: if request.auth != null
+        && (
+          request.auth.uid == storeId
+          || (resource != null && request.auth.uid in resource.data.members)
+        );
+      // Criação inicial: storeId tem que bater com o uid do criador
+      allow create: if request.auth != null
+        && request.auth.uid == storeId
+        && request.auth.uid in request.resource.data.members;
     }
   }
 }
 ```
+
+> Para adicionar outro usuário à loja, abra Configurações → Loja, peça o UID dele e adicione manualmente em `members[]` (ou implemente um fluxo de convite). O simples "colar o código da loja" do README antigo **não é seguro** com regras abertas — qualquer usuário autenticado leria tudo.
 
 ## Estrutura do projeto
 
