@@ -6,10 +6,15 @@ export function createStorage(App, db, APP_ID) {
     let _writeCount = 0;
     let _writeResetTimer = null;
     const MAX_WRITES_PER_MIN = 20;
+    const MAX_DOC_BYTES = 900 * 1024; // Firestore caps docs at 1 MB; warn earlier.
+    let _sizeWarned = false;
 
-    // Track local edits made while offline for conflict detection
+    // Track local edits for conflict detection (offline OR online concurrent).
     let _offlineEdits = false;
     let _localModifiedAt = null;
+    // Last cloud lastUpdate value we observed. If snapshot brings a different
+    // one while we have unflushed local edits, treat as concurrent conflict.
+    let _lastSeenCloudUpdate = null;
 
     function getStoreId() {
         return localStorage.getItem('foz_store_id') || (App.currentUser?.uid ?? null);
@@ -50,15 +55,26 @@ export function createStorage(App, db, APP_ID) {
                     const d = docSnap.data();
                     const cloudUpdatedAt = d.lastUpdate ?? null;
 
-                    // Conflict detection: if we have local offline edits that are newer than the cloud
+                    // Conflict detection covers two cases:
+                    // 1. Offline edits newer than cloud (existing behavior).
+                    // 2. Concurrent online edit: we have unflushed local changes
+                    //    AND the cloud's lastUpdate is different from what we last saw.
+                    const cloudChanged = _lastSeenCloudUpdate !== null && cloudUpdatedAt !== _lastSeenCloudUpdate;
+                    const hasPendingLocal = _saveCloudDebounced && _localModifiedAt;
                     if (_offlineEdits && _localModifiedAt && cloudUpdatedAt) {
                         const cloudTime = new Date(cloudUpdatedAt).getTime();
                         const localTime = new Date(_localModifiedAt).getTime();
                         if (localTime > cloudTime) {
+                            _lastSeenCloudUpdate = cloudUpdatedAt;
                             this._handleConflict(d);
                             return;
                         }
+                    } else if (cloudChanged && hasPendingLocal) {
+                        _lastSeenCloudUpdate = cloudUpdatedAt;
+                        this._handleConflict(d);
+                        return;
                     }
+                    _lastSeenCloudUpdate = cloudUpdatedAt;
                     _offlineEdits = false;
                     _localModifiedAt = null;
 
@@ -186,6 +202,21 @@ export function createStorage(App, db, APP_ID) {
                         const user = App.currentUser;
                         const storeId = getStoreId();
                         if (user && storeId) {
+                            const payload = {
+                                products: App.data.products,
+                                orders: App.data.orders,
+                                config: App.data.config,
+                                caixa: App.data.caixa || null,
+                                lastUpdate: new Date().toISOString()
+                            };
+                            const size = new Blob([JSON.stringify(payload)]).size;
+                            if (size > MAX_DOC_BYTES && !_sizeWarned) {
+                                _sizeWarned = true;
+                                App.ui.toast('Atenção: dados perto do limite (1 MB). Exporte um backup e arquive pedidos antigos.', true);
+                            }
+                            const docRef = doc(db, 'artifacts', APP_ID, 'stores', storeId, 'data', 'store');
+                            await setDoc(docRef, payload);
+                            _lastSeenCloudUpdate = payload.lastUpdate;
                             const docRef = doc(db, 'artifacts', APP_ID, 'stores', storeId, 'data', 'store');
                             await setDoc(docRef, this._buildDocPayload());
                         }
@@ -198,6 +229,19 @@ export function createStorage(App, db, APP_ID) {
             _saveCloudDebounced();
         },
 
+        flushPendingSave() {
+            if (_saveCloudDebounced && _saveCloudDebounced.flush) return _saveCloudDebounced.flush();
+            return undefined;
+        },
+
+        // Clear session-bound state. Call on logout / switching to offline,
+        // otherwise stale _lastSeenCloudUpdate from the previous user can
+        // trigger a false conflict on the next sign-in.
+        reset() {
+            _offlineEdits = false;
+            _localModifiedAt = null;
+            _lastSeenCloudUpdate = null;
+            _sizeWarned = false;
         async saveNow() {
             _localModifiedAt = new Date().toISOString();
             this._saveLocal();

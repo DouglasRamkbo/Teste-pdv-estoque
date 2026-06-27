@@ -63,11 +63,17 @@ npm test          # roda os 35 testes unitários
 
 ### Configuração do Firebase
 
+O projeto vem com um Firebase de exemplo embutido em `src/main.js` como fallback. Para usar o seu próprio (recomendado):
 O projeto vem com um Firebase de exemplo embutido em `src/main.js`. Para usar o seu próprio, **prefira variáveis de ambiente** (não comite as chaves):
 
 1. Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com)
 2. Ative **Authentication** (Email/Password e Google)
 3. Ative **Firestore Database** em modo de produção
+4. Copie `.env.example` para `.env` e preencha com suas credenciais — o Vite as injeta em build/dev automaticamente
+
+#### Regras de segurança do Firestore
+
+> **Aviso:** a regra abaixo (`allow read, write: if request.auth != null;`) deixa qualquer usuário autenticado ler/escrever qualquer loja se conhecer o `storeId` (UID do dono). Use apenas em ambientes de teste. Para produção, restrinja por owner/membership:
 4. Copie `.env.example` para `.env` e preencha `VITE_FIREBASE_*`
 5. (Opcional) Habilite **App Check** + restrinja a apiKey por referer HTTP no console do Google Cloud — apiKeys de Firebase Web são públicas no bundle, mas só são realmente seguras com essas duas proteções
 
@@ -81,6 +87,15 @@ A loja é compartilhada por uma lista de UIDs em `members[]` dentro do próprio 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Estrito: apenas o dono da loja (storeId == uid) pode ler/escrever.
+    match /artifacts/{appId}/stores/{storeId}/data/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == storeId;
+    }
+  }
+}
+```
+
+Para suporte multi-usuário (compartilhar `storeId`), mantenha uma subcoleção `members/{uid}` na loja e use `exists(/.../stores/$(storeId)/members/$(request.auth.uid))` na regra.
     match /artifacts/{appId}/stores/{storeId}/data/store {
       // Leitura/escrita só se o usuário for membro OU o próprio dono (storeId == uid)
       allow read, write: if request.auth != null
@@ -143,7 +158,7 @@ vendor/                  # assets locais (fontes, ícones, CSS)
 
 ## Testes
 
-35 testes unitários cobrindo utils, storage, cart, inventory, orders e cálculos financeiros.
+Testes unitários cobrindo utils (formatação, sanitização, CSV, debounce, IDs), cálculo de saldo de caixa e helpers críticos.
 
 ```bash
 npm test
