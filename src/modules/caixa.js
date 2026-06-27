@@ -125,12 +125,6 @@ export function createCaixa(App) {
         closeCaixa() {
             if (getState().status !== 'aberto') return App.ui.toast('Caixa já está fechado.', true);
             const expected = computeCaixaExpected(getState(), App.data.orders);
-            const state = getState();
-            const openedDate = new Date(state.openedAt);
-            const cashIn = App.data.orders.filter(o => new Date(o.date) >= openedDate && o.payment === 'Dinheiro').reduce((s, o) => s + o.total, 0);
-            const suprimentos = state.transactions.filter(t => t.type === 'suprimento').reduce((s, t) => s + t.amount, 0);
-            const sangrias = state.transactions.filter(t => t.type === 'sangria').reduce((s, t) => s + t.amount, 0);
-            const expected = (state.openingBalance || 0) + cashIn + suprimentos - sangrias;
             _pendingExpected = expected;
             const expEl = document.getElementById('caixa-close-expected');
             if (expEl) expEl.textContent = App.utils.formatMoney(expected);
@@ -142,7 +136,6 @@ export function createCaixa(App) {
         handleClose(e) {
             e.preventDefault();
             const real = parseFloat(document.getElementById('caixa-close-real').value) || 0;
-            const expected = computeCaixaExpected(getState(), App.data.orders);
             const expected = _pendingExpected;
             const diff = real - expected;
             App.data.caixa = { ...getState(), status: 'fechado', closingBalance: real, closedAt: new Date().toISOString() };

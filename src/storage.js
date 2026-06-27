@@ -202,13 +202,7 @@ export function createStorage(App, db, APP_ID) {
                         const user = App.currentUser;
                         const storeId = getStoreId();
                         if (user && storeId) {
-                            const payload = {
-                                products: App.data.products,
-                                orders: App.data.orders,
-                                config: App.data.config,
-                                caixa: App.data.caixa || null,
-                                lastUpdate: new Date().toISOString()
-                            };
+                            const payload = this._buildDocPayload();
                             const size = new Blob([JSON.stringify(payload)]).size;
                             if (size > MAX_DOC_BYTES && !_sizeWarned) {
                                 _sizeWarned = true;
@@ -217,8 +211,6 @@ export function createStorage(App, db, APP_ID) {
                             const docRef = doc(db, 'artifacts', APP_ID, 'stores', storeId, 'data', 'store');
                             await setDoc(docRef, payload);
                             _lastSeenCloudUpdate = payload.lastUpdate;
-                            const docRef = doc(db, 'artifacts', APP_ID, 'stores', storeId, 'data', 'store');
-                            await setDoc(docRef, this._buildDocPayload());
                         }
                     } catch (e) {
                         console.error('Cloud Save Error:', e);
@@ -242,6 +234,8 @@ export function createStorage(App, db, APP_ID) {
             _localModifiedAt = null;
             _lastSeenCloudUpdate = null;
             _sizeWarned = false;
+        },
+
         async saveNow() {
             _localModifiedAt = new Date().toISOString();
             this._saveLocal();
@@ -250,7 +244,9 @@ export function createStorage(App, db, APP_ID) {
             const storeId = getStoreId();
             if (!user || !storeId) return;
             const docRef = doc(db, 'artifacts', APP_ID, 'stores', storeId, 'data', 'store');
-            await setDoc(docRef, this._buildDocPayload());
+            const payload = this._buildDocPayload();
+            await setDoc(docRef, payload);
+            _lastSeenCloudUpdate = payload.lastUpdate;
         },
 
         // Called after auth to set up store path
