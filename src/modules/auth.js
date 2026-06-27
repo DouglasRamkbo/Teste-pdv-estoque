@@ -63,9 +63,7 @@ export function createAuth(App, auth) {
 
         async logout() {
             if (!confirm('Deseja sair da conta?')) return;
-            if (App.storage.flushPendingSave) {
-                try { await App.storage.flushPendingSave(); } catch (e) { console.warn('flush on logout:', e); }
-            }
+            try { await App.storage.saveNow(); } catch (e) { console.warn('save on logout:', e); }
             if (App.storage._unsubscribe) { App.storage._unsubscribe(); App.storage._unsubscribe = null; }
             if (App.storage.reset) App.storage.reset();
             App.data.products = []; App.data.orders = []; App.data.cart = [];
