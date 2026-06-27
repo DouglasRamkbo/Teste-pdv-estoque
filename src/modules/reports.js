@@ -169,6 +169,12 @@ export function createReports(App) {
             if (!name) { resultArea.classList.add('hidden'); emptyArea.classList.remove('hidden'); return; }
 
             const orders = App.data.orders.filter(o => o.customer === name);
+            if (orders.length === 0) {
+                resultArea.classList.add('hidden');
+                emptyArea.classList.remove('hidden');
+                App.ui.toast('Cliente sem pedidos no histórico.', true);
+                return;
+            }
             const totalSpent = orders.reduce((acc, o) => acc + o.total, 0);
             const firstDate = new Date(orders.reduce((min, o) => { const t = new Date(o.date).getTime(); return t < min ? t : min; }, Infinity));
 

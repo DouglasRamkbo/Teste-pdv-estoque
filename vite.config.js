@@ -28,9 +28,14 @@ export default defineConfig({
     root: '.',
     build: {
         outDir: 'dist',
+        chunkSizeWarningLimit: 800,
         rollupOptions: {
             input: resolve(__dirname, 'index.html'),
-            output: { manualChunks: undefined }
+            output: {
+                manualChunks: {
+                    firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore']
+                }
+            }
         }
     },
     publicDir: 'public',

@@ -14,6 +14,10 @@ export function createBackup(App) {
             const file = input.files[0];
             if (!file) return;
             if (file.size > 5 * 1024 * 1024) return App.ui.toast('Arquivo muito grande (máx 5MB).', true);
+            if (!confirm('Importar irá SOBRESCREVER os produtos e pedidos atuais. Continuar?')) {
+                input.value = '';
+                return;
+            }
             const reader = new FileReader();
             reader.onload = function (e) {
                 try {
@@ -83,6 +87,12 @@ export function createBackup(App) {
             App.storage.save();
             if (App.storage.flushPendingSave) {
                 try { await App.storage.flushPendingSave(); } catch (e) { console.warn('flush on clearAll:', e); }
+            App.data.products = []; App.data.orders = []; App.data.cart = []; App.data.caixa = null;
+            try {
+                await App.storage.saveNow();
+            } catch (e) {
+                console.error('clearAll cloud sync failed:', e);
+                App.ui.toast('Falha ao limpar nuvem — dados locais zerados.', true);
             }
             location.reload();
         }
