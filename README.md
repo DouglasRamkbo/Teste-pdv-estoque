@@ -63,21 +63,19 @@ npm test          # roda os 35 testes unitários
 
 ### Configuração do Firebase
 
-O projeto vem com um Firebase de exemplo embutido em `src/main.js` como fallback. Para usar o seu próprio (recomendado):
-O projeto vem com um Firebase de exemplo embutido em `src/main.js`. Para usar o seu próprio, **prefira variáveis de ambiente** (não comite as chaves):
+As credenciais Firebase **devem** vir de variáveis de ambiente — o app falha cedo com mensagem clara se faltarem.
 
 1. Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com)
-2. Ative **Authentication** (Email/Password e Google)
-3. Ative **Firestore Database** em modo de produção
-4. Copie `.env.example` para `.env` e preencha com suas credenciais — o Vite as injeta em build/dev automaticamente
-
-#### Regras de segurança do Firestore
-
-> **Aviso:** a regra abaixo (`allow read, write: if request.auth != null;`) deixa qualquer usuário autenticado ler/escrever qualquer loja se conhecer o `storeId` (UID do dono). Use apenas em ambientes de teste. Para produção, restrinja por owner/membership:
-4. Copie `.env.example` para `.env` e preencha `VITE_FIREBASE_*`
-5. (Opcional) Habilite **App Check** + restrinja a apiKey por referer HTTP no console do Google Cloud — apiKeys de Firebase Web são públicas no bundle, mas só são realmente seguras com essas duas proteções
-
-> ⚠️ A apiKey de exemplo embutida em `src/main.js` está no histórico do git. Se você usá-la em produção, **rotacione-a** no console do Firebase e mude o projeto para o seu.
+2. Ative **Authentication** (Email/Password e Google) e **Firestore Database** em modo de produção
+3. Para desenvolvimento local: copie `.env.example` para `.env` e preencha `VITE_FIREBASE_*`
+4. Para deploy no Netlify: vá em **Site settings → Environment variables** e adicione as 6 variáveis:
+    - `VITE_FIREBASE_API_KEY`
+    - `VITE_FIREBASE_AUTH_DOMAIN`
+    - `VITE_FIREBASE_PROJECT_ID`
+    - `VITE_FIREBASE_STORAGE_BUCKET`
+    - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+    - `VITE_FIREBASE_APP_ID`
+5. (Opcional, recomendado) Habilite **App Check** e restrinja a apiKey por referer HTTP no console do Google Cloud — apiKeys de Firebase Web sempre acabam no bundle, então essas duas proteções é o que de fato segura o backend.
 
 #### Regras de segurança do Firestore
 

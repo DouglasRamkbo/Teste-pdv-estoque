@@ -19,24 +19,22 @@ import { createShortcuts } from './modules/shortcuts.js';
 let firebaseConfig;
 if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
-} else if (import.meta.env?.VITE_FIREBASE_API_KEY) {
-    firebaseConfig = {
-        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-        appId: import.meta.env.VITE_FIREBASE_APP_ID
-    };
 } else {
     const env = import.meta.env || {};
+    const missing = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_APP_ID']
+        .filter(k => !env[k]);
+    if (missing.length) {
+        const msg = `Firebase nao configurado. Defina as variaveis no .env (ou no painel do Netlify): ${missing.join(', ')}`;
+        document.body.innerHTML = `<pre style="padding:2em;color:#f87171;font-family:monospace;white-space:pre-wrap;">${msg}</pre>`;
+        throw new Error(msg);
+    }
     firebaseConfig = {
-        apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyDAipnkQ0hEuyBTXxhDItFSZuHUn1TQqwg",
-        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "lk-assistencia.firebaseapp.com",
-        projectId: env.VITE_FIREBASE_PROJECT_ID || "lk-assistencia",
-        storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "lk-assistencia.firebasestorage.app",
-        messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1047697682416",
-        appId: env.VITE_FIREBASE_APP_ID || "1:1047697682416:web:37234abd5b616063693735"
+        apiKey: env.VITE_FIREBASE_API_KEY,
+        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+        projectId: env.VITE_FIREBASE_PROJECT_ID,
+        storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+        appId: env.VITE_FIREBASE_APP_ID
     };
 }
 
